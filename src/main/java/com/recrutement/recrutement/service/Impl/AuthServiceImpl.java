@@ -1,0 +1,809 @@
+package com.recrutement.recrutement.service.Impl;
+
+import com.recrutement.recrutement.dto.AdminRegisterRequest;
+import com.recrutement.recrutement.dto.CandidateRegisterRequest;
+import com.recrutement.recrutement.dto.ForgotPasswordRequest;
+import com.recrutement.recrutement.dto.LoginRequest;
+import com.recrutement.recrutement.dto.LoginResponse;
+import com.recrutement.recrutement.dto.MessageResponse;
+import com.recrutement.recrutement.dto.RecruiterRegisterRequest;
+import com.recrutement.recrutement.dto.RegisterResponse;
+import com.recrutement.recrutement.dto.ResetPasswordRequest;
+import com.recrutement.recrutement.dto.SocialAuthRequest;
+import com.recrutement.recrutement.dto.SocialAuthResponse;
+import com.recrutement.recrutement.dto.UserProfileResponse;
+import com.recrutement.recrutement.dto.UserSummaryResponse;
+import com.recrutement.recrutement.entities.AccountApprovalStatus;
+import com.recrutement.recrutement.entities.Candidate;
+import com.recrutement.recrutement.entities.Recruiter;
+import com.recrutement.recrutement.entities.Role;
+import com.recrutement.recrutement.entities.User;
+import com.recrutement.recrutement.repositories.CandidateRepository;
+import com.recrutement.recrutement.repositories.CandidatureRepository;
+import com.recrutement.recrutement.repositories.OffreRepository;
+import com.recrutement.recrutement.repositories.RecruiterRepository;
+import com.recrutement.recrutement.repositories.UserRepository;
+import com.recrutement.recrutement.security.JwtUtils;
+import com.recrutement.recrutement.service.AuthService;
+import com.recrutement.recrutement.service.EmailService;
+import com.recrutement.recrutement.service.NotificationService;
+import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class AuthServiceImpl implements AuthService {
+    private static final Logger logger = LoggerFactory.getLogger(AuthServiceImpl.class);
+
+    private final UserRepository userRepository;
+    private final CandidateRepository candidateRepository;
+    private final RecruiterRepository recruiterRepository;
+    private final OffreRepository offreRepository;
+    private final CandidatureRepository candidatureRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtUtils jwtUtils;
+    private final EmailService emailService;
+    private final NotificationService notificationService;
+
+    public AuthServiceImpl(
+            UserRepository userRepository,
+            CandidateRepository candidateRepository,
+            RecruiterRepository recruiterRepository,
+            OffreRepository offreRepository,
+            CandidatureRepository candidatureRepository,
+            PasswordEncoder passwordEncoder,
+            JwtUtils jwtUtils,
+            EmailService emailService,
+            NotificationService notificationService
+    ) {
+        this.userRepository = userRepository;
+        this.candidateRepository = candidateRepository;
+        this.recruiterRepository = recruiterRepository;
+        this.offreRepository = offreRepository;
+        this.candidatureRepository = candidatureRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtUtils = jwtUtils;
+        this.emailService = emailService;
+        this.notificationService = notificationService;
+    }
+
+    @Override
+    public RegisterResponse registerCandidate(CandidateRegisterRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            return RegisterResponse.builder().success(false).message("Email existe deja").build();
+        }
+
+        String activationToken = UUID.randomUUID().toString();
+
+        Candidate candidate = new Candidate();
+        candidate.setEmail(request.getEmail());
+        candidate.setNom(request.getUsername());
+        candidate.setPassword(passwordEncoder.encode(request.getPassword()));
+        candidate.setRole(Role.CANDIDATE);
+        candidate.setStatutCompte(true);
+        candidate.setApprovalStatus(AccountApprovalStatus.APPROVED);
+        candidate.setEmailVerified(false);
+        candidate.setActivationToken(activationToken);
+        candidate.setNumTelephone(request.getPhoneNumber());
+
+        Candidate savedCandidate = candidateRepository.save(candidate);
+        emailService.sendActivationEmail(savedCandidate.getEmail(), savedCandidate.getNom(), activationToken);
+
+        return RegisterResponse.builder()
+                .id(savedCandidate.getId())
+                .email(savedCandidate.getEmail())
+                .nom(savedCandidate.getNom())
+                .role(savedCandidate.getRole())
+                .approvalStatus(AccountApprovalStatus.APPROVED.name())
+                .statutCompte(Boolean.TRUE.equals(savedCandidate.getStatutCompte()))
+                .success(true)
+                .message("Candidat enregistre avec succes. Veuillez verifier votre email pour activer votre compte.")
+                .build();
+    }
+
+    @Override
+    public RegisterResponse registerRecruiter(RecruiterRegisterRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            return RegisterResponse.builder()
+                    .success(false)
+                    .message("Email existe deja")
+                    .build();
+        }
+
+        Recruiter recruiter = new Recruiter();
+        recruiter.setEmail(request.getEmail());
+        recruiter.setNom(request.getUsername());
+        recruiter.setPassword(passwordEncoder.encode(request.getPassword()));
+        recruiter.setRole(Role.RECRUITER);
+        recruiter.setStatutCompte(false);
+        recruiter.setApprovalStatus(AccountApprovalStatus.PENDING);
+        recruiter.setEmailVerified(false);
+        recruiter.setFonction(request.getFonction());
+        recruiter.setPoste(request.getPoste());
+        recruiter.setDepartement(request.getDepartement());
+
+        Recruiter savedRecruiter = recruiterRepository.save(recruiter);
+        notifyAdminsForRecruiterApproval(savedRecruiter);
+        notificationService.notifyAdmins("Nouveau recruteur en attente : " + savedRecruiter.getNom());
+        notificationService.notifyUser(savedRecruiter, "Votre compte recruteur est en attente d'approbation par l'administrateur.");
+
+        return RegisterResponse.builder()
+                .id(savedRecruiter.getId())
+                .email(savedRecruiter.getEmail())
+                .nom(savedRecruiter.getNom())
+                .role(savedRecruiter.getRole())
+                .approvalStatus(AccountApprovalStatus.PENDING.name())
+                .statutCompte(Boolean.TRUE.equals(savedRecruiter.getStatutCompte()))
+                .success(true)
+                .message("Recruteur enregistre avec succes. Votre compte est en attente d'approbation par l'administrateur.")
+                .build();
+    }
+
+    @Override
+    public RegisterResponse registerAdmin(AdminRegisterRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            return RegisterResponse.builder()
+                    .success(false)
+                    .message("Email existe deja")
+                    .build();
+        }
+
+        User admin = new User();
+        admin.setEmail(request.getEmail());
+        admin.setNom(request.getNom());
+        admin.setPassword(passwordEncoder.encode(request.getPassword()));
+        admin.setRole(Role.ADMIN);
+        admin.setStatutCompte(true);
+        admin.setApprovalStatus(AccountApprovalStatus.APPROVED);
+        admin.setEmailVerified(true);
+
+        User savedAdmin = userRepository.save(admin);
+
+        return RegisterResponse.builder()
+                .id(savedAdmin.getId())
+                .email(savedAdmin.getEmail())
+                .nom(savedAdmin.getNom())
+                .role(savedAdmin.getRole())
+                .approvalStatus(AccountApprovalStatus.APPROVED.name())
+                .statutCompte(Boolean.TRUE.equals(savedAdmin.getStatutCompte()))
+                .success(true)
+                .message("Admin enregistre avec succes")
+                .build();
+    }
+
+    @Override
+    public LoginResponse login(LoginRequest request) {
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new RuntimeException("Email ou mot de passe invalide."));
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new RuntimeException("Email ou mot de passe invalide.");
+        }
+
+        String roleValue = user.getRole() == null ? "" : user.getRole().toString().toUpperCase();
+        boolean isAdmin = "ADMIN".equals(roleValue) || "ROLE_ADMIN".equals(roleValue);
+
+        if (user.getRole() == Role.RECRUITER) {
+            AccountApprovalStatus approvalStatus = resolveApprovalStatus(user);
+            if (approvalStatus == AccountApprovalStatus.REFUSED) {
+                throw new RuntimeException("Votre demande de compte recruteur a ete refusee par l'administrateur.");
+            }
+            if (approvalStatus != AccountApprovalStatus.APPROVED || user.getStatutCompte() == null || !user.getStatutCompte()) {
+                throw new RuntimeException("Votre compte est en attente d'approbation par l'administrateur.");
+            }
+            if (!Boolean.TRUE.equals(user.getEmailverified())) {
+                throw new RuntimeException("Veuillez verifier votre email avant de vous connecter.");
+            }
+        } else if (!isAdmin && !Boolean.TRUE.equals(user.getEmailverified())) {
+            throw new RuntimeException("Veuillez verifier votre email avant de vous connecter.");
+        } else if (user.getStatutCompte() == null || !user.getStatutCompte()) {
+            throw new RuntimeException("Votre compte n'est pas actif.");
+        }
+
+        return buildLoginResponse(user, "Login reussi");
+    }
+
+    @Override
+    public SocialAuthResponse socialAuth(SocialAuthRequest request) {
+        if (request == null || request.getEmail() == null || request.getEmail().isBlank()) {
+            return buildSocialErrorResponse("L'adresse e-mail est obligatoire pour continuer.");
+        }
+
+        String providerLabel = getProviderLabel(request.getProvider());
+        if (providerLabel == null) {
+            return buildSocialErrorResponse("Le fournisseur social selectionne est invalide.");
+        }
+        String mode = normalizeValue(request.getMode());
+        String email = request.getEmail().trim().toLowerCase();
+        User existingUser = userRepository.findByEmail(email).orElse(null);
+
+        if (!"LOGIN".equals(mode) && !"REGISTER".equals(mode)) {
+            return buildSocialErrorResponse("Mode de connexion sociale invalide.");
+        }
+
+        if ("LOGIN".equals(mode)) {
+            if (existingUser == null) {
+                return buildSocialErrorResponse("Aucun compte n'est associe a cette adresse e-mail. Utilisez l'inscription.");
+            }
+
+            if (existingUser.getRole() == Role.RECRUITER) {
+                AccountApprovalStatus approvalStatus = resolveApprovalStatus(existingUser);
+                if (approvalStatus == AccountApprovalStatus.REFUSED) {
+                    return buildSocialErrorResponse("Votre demande de compte recruteur a ete refusee par l'administrateur.");
+                }
+                if (approvalStatus != AccountApprovalStatus.APPROVED || existingUser.getStatutCompte() == null || !existingUser.getStatutCompte()) {
+                    return buildSocialErrorResponse("Votre compte est en attente d'approbation par l'administrateur.");
+                }
+            } else if (existingUser.getStatutCompte() == null || !existingUser.getStatutCompte()) {
+                return buildSocialErrorResponse("Votre compte n'est pas actif.");
+            }
+
+            markEmailAsVerifiedIfNeeded(existingUser);
+            return buildSocialSuccessResponse(existingUser, "Connexion avec " + providerLabel + " reussie.", true);
+        }
+
+        Role requestedRole = normalizeRole(request.getRole());
+        if (requestedRole == null || requestedRole == Role.ADMIN) {
+            return buildSocialErrorResponse("Le role selectionne est invalide pour l'inscription sociale.");
+        }
+
+        if (request.getUsername() == null || request.getUsername().isBlank()) {
+            return buildSocialErrorResponse("Le nom complet est obligatoire pour creer le compte.");
+        }
+
+        if (existingUser != null) {
+            if (existingUser.getRole() != requestedRole) {
+                return buildSocialErrorResponse(
+                        "Cette adresse e-mail existe deja avec le role " + existingUser.getRole().name() + "."
+                );
+            }
+
+            if (existingUser.getRole() == Role.RECRUITER && resolveApprovalStatus(existingUser) == AccountApprovalStatus.REFUSED) {
+                return buildSocialErrorResponse("Cette adresse e-mail correspond a un compte recruteur refuse.");
+            }
+
+            if (existingUser.getStatutCompte() == null || !existingUser.getStatutCompte()) {
+                return buildSocialSuccessResponse(
+                        existingUser,
+                        "Le compte " + existingUser.getEmail() + " existe deja et reste en attente d'approbation.",
+                        false
+                );
+            }
+
+            markEmailAsVerifiedIfNeeded(existingUser);
+            return buildSocialSuccessResponse(existingUser, "Compte existant detecte. Connexion avec " + providerLabel + " reussie.", true);
+        }
+
+        if (requestedRole == Role.CANDIDATE) {
+            Candidate candidate = new Candidate();
+            candidate.setEmail(email);
+            candidate.setNom(request.getUsername().trim());
+            candidate.setPassword(passwordEncoder.encode(generateSocialPassword()));
+            candidate.setRole(Role.CANDIDATE);
+            candidate.setStatutCompte(true);
+            candidate.setApprovalStatus(AccountApprovalStatus.APPROVED);
+            candidate.setEmailVerified(true);
+            candidate.setActivationToken(null);
+            candidate.setNumTelephone(cleanValue(request.getPhoneNumber()));
+
+            Candidate savedCandidate = candidateRepository.save(candidate);
+            sendWelcomeEmailSafely(savedCandidate);
+            return buildSocialSuccessResponse(
+                    savedCandidate,
+                    "Compte candidat cree avec " + providerLabel + ". Connexion reussie.",
+                    true
+            );
+        }
+
+        Recruiter recruiter = new Recruiter();
+        recruiter.setEmail(email);
+        recruiter.setNom(request.getUsername().trim());
+        recruiter.setPassword(passwordEncoder.encode(generateSocialPassword()));
+        recruiter.setRole(Role.RECRUITER);
+        recruiter.setStatutCompte(false);
+        recruiter.setApprovalStatus(AccountApprovalStatus.PENDING);
+        recruiter.setEmailVerified(true);
+        recruiter.setActivationToken(null);
+        recruiter.setFonction(cleanValue(request.getFonction()));
+        recruiter.setPoste(cleanValue(request.getPoste()));
+        recruiter.setDepartement(cleanValue(request.getDepartement()));
+
+        Recruiter savedRecruiter = recruiterRepository.save(recruiter);
+        notifyAdminsForRecruiterApproval(savedRecruiter);
+        notifyAdminsSafely("Nouveau recruteur en attente : " + savedRecruiter.getNom());
+        notificationService.notifyUser(savedRecruiter, "Votre compte recruteur est en attente d'approbation par l'administrateur.");
+
+        return buildSocialSuccessResponse(
+                savedRecruiter,
+                "Compte recruteur cree avec " + providerLabel + ". Votre compte est en attente d'approbation par l'administrateur.",
+                false
+        );
+    }
+
+    @Override
+    public String activateAccount(String token) {
+        User user = userRepository.findByactivationToken(token)
+                .orElseThrow(() -> new RuntimeException("Token d'activation invalide"));
+
+        if (Boolean.TRUE.equals(user.getEmailverified())) {
+            return "Ce compte est deja active.";
+        }
+
+        user.setEmailVerified(true);
+        user.setActivationToken(null);
+        userRepository.save(user);
+
+        emailService.sendWelcomeEmail(user.getEmail(), user.getNom());
+
+        return "Votre compte a ete active avec succes. Vous pouvez maintenant vous connecter.";
+    }
+
+    @Override
+    public RegisterResponse approveRecruiter(Long recruiterId) {
+        User user = userRepository.findById(recruiterId)
+                .orElseThrow(() -> new RuntimeException("Recruteur non trouve"));
+
+        if (user.getRole() != Role.RECRUITER) {
+            return RegisterResponse.builder()
+                    .success(false)
+                    .message("Cet utilisateur n'est pas un recruteur")
+                    .build();
+        }
+
+        user.setStatutCompte(true);
+        user.setApprovalStatus(AccountApprovalStatus.APPROVED);
+        user.setEmailVerified(true);
+        user.setActivationToken(null);
+        userRepository.save(user);
+
+        boolean emailSent = true;
+
+        try {
+            notificationService.notifyUser(user, "Votre compte recruteur est maintenant active.");
+        } catch (RuntimeException ex) {
+            logger.warn("Echec de creation de la notification d'activation pour {}", user.getEmail(), ex);
+        }
+
+        try {
+            emailService.sendRecruiterApprovedEmail(user.getEmail(), user.getNom());
+        } catch (RuntimeException ex) {
+            emailSent = false;
+            logger.error("Echec d'envoi de l'email d'approbation au recruteur {}", user.getEmail(), ex);
+        }
+
+        return RegisterResponse.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .nom(user.getNom())
+                .role(user.getRole())
+                .approvalStatus(AccountApprovalStatus.APPROVED.name())
+                .statutCompte(Boolean.TRUE.equals(user.getStatutCompte()))
+                .success(true)
+                .message(emailSent
+                        ? "Recruteur active avec succes. Un email de confirmation a ete envoye."
+                        : "Recruteur active avec succes. Le compte est mis a jour, mais l'email de confirmation n'a pas pu etre envoye."
+                )
+                .build();
+    }
+
+    @Override
+    public MessageResponse rejectRecruiter(Long recruiterId) {
+        User user = userRepository.findById(recruiterId)
+                .orElseThrow(() -> new RuntimeException("Recruteur non trouve"));
+
+        if (user.getRole() != Role.RECRUITER) {
+            return new MessageResponse(false, "Cet utilisateur n'est pas un recruteur");
+        }
+
+        user.setStatutCompte(false);
+        user.setApprovalStatus(AccountApprovalStatus.REFUSED);
+        userRepository.save(user);
+
+        boolean emailSent = true;
+
+        try {
+            notificationService.notifyUser(user, "Votre demande de compte recruteur a ete refusee par l'administrateur.");
+        } catch (RuntimeException ex) {
+            logger.warn("Echec de creation de la notification de refus pour {}", user.getEmail(), ex);
+        }
+
+        try {
+            emailService.sendRecruiterRejectedEmail(user.getEmail(), user.getNom());
+        } catch (RuntimeException ex) {
+            emailSent = false;
+            logger.error("Echec d'envoi de l'email de refus au recruteur {}", user.getEmail(), ex);
+        }
+
+        return new MessageResponse(
+                true,
+                emailSent
+                        ? "Compte recruteur refuse. Un email de refus a ete envoye."
+                        : "Compte recruteur refuse. Le statut est mis a jour, mais l'email de refus n'a pas pu etre envoye."
+        );
+    }
+
+    @Override
+    public List<RegisterResponse> getRecruiterAccounts() {
+        return userRepository.findAllByRole(Role.RECRUITER).stream()
+                .sorted(
+                        Comparator
+                                .comparing((User user) -> getApprovalStatusOrder(resolveApprovalStatus(user)))
+                                .thenComparing(User::getId, Comparator.reverseOrder())
+                )
+                .map(user -> RegisterResponse.builder()
+                        .id(user.getId())
+                        .nom(user.getNom())
+                        .email(user.getEmail())
+                        .role(user.getRole())
+                        .approvalStatus(resolveApprovalStatus(user).name())
+                        .statutCompte(Boolean.TRUE.equals(user.getStatutCompte()))
+                        .success(true)
+                        .build()
+                )
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void deleteRecruiterAccount(Long recruiterId) {
+        User user = userRepository.findById(recruiterId)
+                .orElseThrow(() -> new RuntimeException("Recruteur non trouve"));
+
+        if (user.getRole() != Role.RECRUITER) {
+            throw new RuntimeException("Cet utilisateur n'est pas un recruteur");
+        }
+
+        candidatureRepository.deleteByOffre_Recruiter_Id(recruiterId);
+        offreRepository.deleteByRecruiter_Id(recruiterId);
+        notificationService.clearNotificationsForUser(user);
+        recruiterRepository.deleteById(recruiterId);
+    }
+
+    @Override
+    public List<UserSummaryResponse> getUsers(String query) {
+        Map<Long, User> allUsers = new LinkedHashMap<>();
+        userRepository.findAll().forEach(user -> allUsers.put(user.getId(), user));
+        userRepository.findAllByRole(Role.ADMIN).forEach(user -> allUsers.put(user.getId(), user));
+
+        String trimmedQuery = query == null ? "" : query.trim();
+
+        return allUsers.values().stream()
+                .filter(user -> user.getRole() != Role.ADMIN)
+                .filter(user -> matchesUserQuery(user, trimmedQuery))
+                .sorted(Comparator.comparing(User::getId).reversed())
+                .map(user -> new UserSummaryResponse(user.getId(), user.getNom(), user.getEmail(), user.getRole()))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public UserProfileResponse getUserById(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable."));
+        UserProfileResponse response = new UserProfileResponse();
+        response.setId(user.getId());
+        response.setNom(user.getNom());
+        response.setEmail(user.getEmail());
+        response.setRole(user.getRole());
+        response.setStatutCompte(Boolean.TRUE.equals(user.getStatutCompte()));
+        response.setEmailVerified(Boolean.TRUE.equals(user.getEmailverified()));
+
+        if (user instanceof Candidate candidate) {
+            response.setNumTelephone(candidate.getNumTelephone());
+            response.setPosteRecherche(candidate.getPosteRecherche());
+            response.setLocalisation(candidate.getLocalisation());
+            response.setExperience(candidate.getExperience());
+
+            boolean profileExists = hasText(candidate.getNumTelephone())
+                    || hasText(candidate.getPosteRecherche())
+                    || hasText(candidate.getLocalisation())
+                    || candidate.getExperience() > 0;
+
+            response.setProfileExists(profileExists);
+            if (!profileExists) {
+                response.setProfileMessage("Ce candidat n'a pas encore cree son profil detaille.");
+            }
+            return response;
+        }
+
+        if (user instanceof Recruiter recruiter) {
+            response.setFonction(recruiter.getFonction());
+            response.setPoste(recruiter.getPoste());
+            response.setDepartement(recruiter.getDepartement());
+            if (recruiter.getEntreprise() != null) {
+                response.setEntreprise(recruiter.getEntreprise().getNomEntreprise());
+            }
+
+            boolean profileExists = hasText(recruiter.getFonction())
+                    || hasText(recruiter.getPoste())
+                    || hasText(recruiter.getDepartement())
+                    || recruiter.getEntreprise() != null;
+
+            response.setProfileExists(profileExists);
+            if (!profileExists) {
+                response.setProfileMessage("Ce recruteur n'a pas encore complete son profil detaille.");
+            }
+            return response;
+        }
+
+        response.setProfileExists(false);
+        response.setProfileMessage("Aucun profil detaille n'est disponible pour cet utilisateur.");
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public MessageResponse deleteUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable."));
+
+        if (user.getRole() == Role.ADMIN) {
+            throw new RuntimeException("La suppression d'un administrateur n'est pas autorisee.");
+        }
+
+        if (user instanceof Recruiter) {
+            candidatureRepository.deleteByOffre_Recruiter_Id(userId);
+            offreRepository.deleteByRecruiter_Id(userId);
+            notificationService.clearNotificationsForUser(user);
+            recruiterRepository.deleteById(userId);
+            return new MessageResponse(true, "Recruteur supprime avec succes.");
+        }
+
+        if (user instanceof Candidate) {
+            notificationService.clearNotificationsForUser(user);
+            candidateRepository.deleteById(userId);
+            return new MessageResponse(true, "Candidat supprime avec succes.");
+        }
+
+        notificationService.clearNotificationsForUser(user);
+        userRepository.deleteById(userId);
+        return new MessageResponse(true, "Utilisateur supprime avec succes.");
+    }
+
+    @Override
+    public MessageResponse forgotPassword(ForgotPasswordRequest request) {
+        String genericMessage = "Si un compte existe avec cette adresse e-mail, un lien de reinitialisation a ete envoye.";
+
+        if (request == null || request.getEmail() == null || request.getEmail().isBlank()) {
+            return new MessageResponse(true, genericMessage);
+        }
+
+        userRepository.findByEmail(request.getEmail().trim()).ifPresent(user -> {
+            String resetToken = UUID.randomUUID().toString();
+            user.setResetPasswordToken(resetToken);
+            user.setResetPasswordTokenExpiresAt(LocalDateTime.now().plusMinutes(30));
+            userRepository.save(user);
+            emailService.sendPasswordResetEmail(user.getEmail(), user.getNom(), resetToken);
+        });
+
+        return new MessageResponse(true, genericMessage);
+    }
+
+    @Override
+    public MessageResponse resetPassword(ResetPasswordRequest request) {
+        if (request == null || request.getToken() == null || request.getToken().isBlank()) {
+            return new MessageResponse(false, "Le lien de reinitialisation est invalide.");
+        }
+
+        if (request.getNewPassword() == null || request.getNewPassword().isBlank()) {
+            return new MessageResponse(false, "Le nouveau mot de passe est obligatoire.");
+        }
+
+        if (request.getNewPassword().length() < 6) {
+            return new MessageResponse(false, "Le mot de passe doit contenir au moins 6 caracteres.");
+        }
+
+        User user = userRepository.findByResetPasswordToken(request.getToken()).orElse(null);
+        if (user == null) {
+            return new MessageResponse(false, "Le lien de reinitialisation est invalide ou a deja ete utilise.");
+        }
+
+        if (user.getResetPasswordTokenExpiresAt() == null
+                || user.getResetPasswordTokenExpiresAt().isBefore(LocalDateTime.now())) {
+            user.setResetPasswordToken(null);
+            user.setResetPasswordTokenExpiresAt(null);
+            userRepository.save(user);
+            return new MessageResponse(false, "Le lien de reinitialisation a expire. Veuillez en demander un nouveau.");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setResetPasswordToken(null);
+        user.setResetPasswordTokenExpiresAt(null);
+        userRepository.save(user);
+
+        return new MessageResponse(true, "Votre mot de passe a ete reinitialise avec succes.");
+    }
+
+    private LoginResponse buildLoginResponse(User user, String message) {
+        String token = jwtUtils.generateToken(user);
+        return LoginResponse.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .username(user.getNom())
+                .role(user.getRole())
+                .token(token)
+                .message(message)
+                .build();
+    }
+
+    private SocialAuthResponse buildSocialErrorResponse(String message) {
+        SocialAuthResponse response = new SocialAuthResponse();
+        response.setSuccess(false);
+        response.setMessage(message);
+        response.setStatutCompte(false);
+        return response;
+    }
+
+    private SocialAuthResponse buildSocialSuccessResponse(User user, String message, boolean withToken) {
+        SocialAuthResponse response = new SocialAuthResponse();
+        response.setSuccess(true);
+        response.setId(user.getId());
+        response.setEmail(user.getEmail());
+        response.setUsername(user.getNom());
+        response.setRole(user.getRole());
+        response.setMessage(message);
+        response.setStatutCompte(Boolean.TRUE.equals(user.getStatutCompte()));
+        if (withToken) {
+            response.setToken(jwtUtils.generateToken(user));
+        }
+        return response;
+    }
+
+    private void markEmailAsVerifiedIfNeeded(User user) {
+        if (!Boolean.TRUE.equals(user.getEmailverified()) || user.getActivationToken() != null) {
+            user.setEmailVerified(true);
+            user.setActivationToken(null);
+            userRepository.save(user);
+        }
+    }
+
+    private Role normalizeRole(String role) {
+        String normalizedRole = normalizeValue(role);
+        if (normalizedRole == null) {
+            return null;
+        }
+        try {
+            return Role.valueOf(normalizedRole);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
+    private String normalizeValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        return trimmed.toUpperCase();
+    }
+
+    private String cleanValue(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim();
+    }
+
+    private String getProviderLabel(String provider) {
+        String normalizedProvider = normalizeValue(provider);
+        if ("GOOGLE".equals(normalizedProvider) || "GMAIL".equals(normalizedProvider)) {
+            return "Gmail";
+        }
+        if ("FACEBOOK".equals(normalizedProvider)) {
+            return "Facebook";
+        }
+        if ("LINKEDIN".equals(normalizedProvider)) {
+            return "LinkedIn";
+        }
+        return null;
+    }
+
+    private String generateSocialPassword() {
+        return "SR-" + UUID.randomUUID() + "-social";
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private boolean matchesUserQuery(User user, String query) {
+        if (query == null || query.isBlank()) {
+            return true;
+        }
+
+        String normalizedQuery = query.toLowerCase();
+        if (user.getNom() != null && user.getNom().toLowerCase().contains(normalizedQuery)) {
+            return true;
+        }
+        if (user.getEmail() != null && user.getEmail().toLowerCase().contains(normalizedQuery)) {
+            return true;
+        }
+
+        try {
+            Long id = Long.parseLong(query);
+            return user.getId() != null && user.getId().equals(id);
+        } catch (NumberFormatException ex) {
+            return false;
+        }
+    }
+
+    private AccountApprovalStatus resolveApprovalStatus(User user) {
+        if (user == null) {
+            return AccountApprovalStatus.PENDING;
+        }
+
+        if (user.getApprovalStatus() != null) {
+            return user.getApprovalStatus();
+        }
+
+        if (Boolean.TRUE.equals(user.getStatutCompte())) {
+            return AccountApprovalStatus.APPROVED;
+        }
+
+        return AccountApprovalStatus.PENDING;
+    }
+
+    private int getApprovalStatusOrder(AccountApprovalStatus status) {
+        if (status == AccountApprovalStatus.PENDING) {
+            return 0;
+        }
+        if (status == AccountApprovalStatus.APPROVED) {
+            return 1;
+        }
+        return 2;
+    }
+
+    private void sendWelcomeEmailSafely(User user) {
+        try {
+            emailService.sendWelcomeEmail(user.getEmail(), user.getNom());
+        } catch (RuntimeException ex) {
+            logger.warn("Echec de l'envoi de l'email de bienvenue pour {}", user.getEmail(), ex);
+        }
+    }
+
+    private void notifyAdminsSafely(String message) {
+        try {
+            notificationService.notifyAdmins(message);
+        } catch (RuntimeException ex) {
+            logger.warn("Echec de creation de la notification admin: {}", message, ex);
+        }
+    }
+
+    private void notifyAdminsForRecruiterApproval(Recruiter recruiter) {
+        List<User> admins = userRepository.findAllByRole(Role.ADMIN);
+
+        if (admins.isEmpty()) {
+            logger.warn("Aucun administrateur trouve pour notifier la creation du recruteur {}", recruiter.getEmail());
+            return;
+        }
+
+        for (User admin : admins) {
+            try {
+                emailService.sendRecruiterPendingApprovalEmail(
+                        admin.getEmail(),
+                        admin.getNom(),
+                        recruiter.getNom(),
+                        recruiter.getEmail()
+                );
+            } catch (RuntimeException ex) {
+                logger.error(
+                        "Echec de notification admin {} pour le recruteur {}",
+                        admin.getEmail(),
+                        recruiter.getEmail(),
+                        ex
+                );
+            }
+        }
+    }
+}
