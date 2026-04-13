@@ -35,4 +35,14 @@ public class ApiExceptionHandler {
                 "Action non autorisee. Reconnectez-vous puis reessayez."
         ));
     }
+
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "message",
+                ex.getMessage() == null || ex.getMessage().isBlank()
+                        ? "Une erreur metier est survenue."
+                        : ex.getMessage()
+        ));
+    }
 }

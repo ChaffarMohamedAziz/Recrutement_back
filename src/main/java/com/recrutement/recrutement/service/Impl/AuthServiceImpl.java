@@ -18,8 +18,10 @@ import com.recrutement.recrutement.entities.Candidate;
 import com.recrutement.recrutement.entities.Recruiter;
 import com.recrutement.recrutement.entities.Role;
 import com.recrutement.recrutement.entities.User;
+import com.recrutement.recrutement.repositories.CVRepository;
 import com.recrutement.recrutement.repositories.CandidateRepository;
 import com.recrutement.recrutement.repositories.CandidatureRepository;
+import com.recrutement.recrutement.repositories.ConversationMessageRepository;
 import com.recrutement.recrutement.repositories.OffreRepository;
 import com.recrutement.recrutement.repositories.RecruiterRepository;
 import com.recrutement.recrutement.repositories.UserRepository;
@@ -47,8 +49,10 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final CandidateRepository candidateRepository;
     private final RecruiterRepository recruiterRepository;
+    private final CVRepository cvRepository;
     private final OffreRepository offreRepository;
     private final CandidatureRepository candidatureRepository;
+    private final ConversationMessageRepository conversationMessageRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final EmailService emailService;
@@ -58,8 +62,10 @@ public class AuthServiceImpl implements AuthService {
             UserRepository userRepository,
             CandidateRepository candidateRepository,
             RecruiterRepository recruiterRepository,
+            CVRepository cvRepository,
             OffreRepository offreRepository,
             CandidatureRepository candidatureRepository,
+            ConversationMessageRepository conversationMessageRepository,
             PasswordEncoder passwordEncoder,
             JwtUtils jwtUtils,
             EmailService emailService,
@@ -68,8 +74,10 @@ public class AuthServiceImpl implements AuthService {
         this.userRepository = userRepository;
         this.candidateRepository = candidateRepository;
         this.recruiterRepository = recruiterRepository;
+        this.cvRepository = cvRepository;
         this.offreRepository = offreRepository;
         this.candidatureRepository = candidatureRepository;
+        this.conversationMessageRepository = conversationMessageRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtils = jwtUtils;
         this.emailService = emailService;
@@ -462,7 +470,8 @@ public class AuthServiceImpl implements AuthService {
             throw new RuntimeException("Cet utilisateur n'est pas un recruteur");
         }
 
-        candidatureRepository.deleteByOffre_Recruiter_Id(recruiterId);
+        clearMessagingForRecruiter(recruiterId, user);
+        candidatureRepository.deleteAllForRecruiter(recruiterId);
         offreRepository.deleteByRecruiter_Id(recruiterId);
         notificationService.clearNotificationsForUser(user);
         recruiterRepository.deleteById(recruiterId);
@@ -550,7 +559,8 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (user instanceof Recruiter) {
-            candidatureRepository.deleteByOffre_Recruiter_Id(userId);
+            clearMessagingForRecruiter(userId, user);
+            candidatureRepository.deleteAllForRecruiter(userId);
             offreRepository.deleteByRecruiter_Id(userId);
             notificationService.clearNotificationsForUser(user);
             recruiterRepository.deleteById(userId);
@@ -558,6 +568,9 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (user instanceof Candidate) {
+            clearMessagingForCandidate(userId, user);
+            cvRepository.deleteAllForCandidate(userId);
+            candidatureRepository.deleteAllForCandidate(userId);
             notificationService.clearNotificationsForUser(user);
             candidateRepository.deleteById(userId);
             return new MessageResponse(true, "Candidat supprime avec succes.");
@@ -805,5 +818,27 @@ public class AuthServiceImpl implements AuthService {
                 );
             }
         }
+    }
+
+    private List<Long> clearMessagingForRecruiter(Long recruiterId, User user) {
+        List<Long> candidatureIds = candidatureRepository.findIdsByRecruiterId(recruiterId);
+
+        if (!candidatureIds.isEmpty()) {
+            conversationMessageRepository.deleteAllByCandidatureIds(candidatureIds);
+        }
+
+        conversationMessageRepository.deleteAllByUserId(user.getId());
+        return candidatureIds;
+    }
+
+    private List<Long> clearMessagingForCandidate(Long candidateId, User user) {
+        List<Long> candidatureIds = candidatureRepository.findIdsByCandidateId(candidateId);
+
+        if (!candidatureIds.isEmpty()) {
+            conversationMessageRepository.deleteAllByCandidatureIds(candidatureIds);
+        }
+
+        conversationMessageRepository.deleteAllByUserId(user.getId());
+        return candidatureIds;
     }
 }

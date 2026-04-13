@@ -32,19 +32,22 @@ public class ApplicationService {
     private final OffreRepository offreRepository;
     private final CandidatureRepository candidatureRepository;
     private final MatchingService matchingService;
+    private final NotificationService notificationService;
 
     public ApplicationService(
             CandidateRepository candidateRepository,
             RecruiterRepository recruiterRepository,
             OffreRepository offreRepository,
             CandidatureRepository candidatureRepository,
-            MatchingService matchingService
+            MatchingService matchingService,
+            NotificationService notificationService
     ) {
         this.candidateRepository = candidateRepository;
         this.recruiterRepository = recruiterRepository;
         this.offreRepository = offreRepository;
         this.candidatureRepository = candidatureRepository;
         this.matchingService = matchingService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -67,7 +70,9 @@ public class ApplicationService {
                 .scoreCandidat(matchResult.getScore())
                 .build();
 
-        return toResponse(candidatureRepository.save(candidature), matchResult);
+        Candidature savedCandidature = candidatureRepository.save(candidature);
+        notifyRecruiterForNewApplication(savedCandidature);
+        return toResponse(savedCandidature, matchResult);
     }
 
     public List<ApplicationResponse> getCandidateApplications(User currentUser) {
@@ -105,7 +110,9 @@ public class ApplicationService {
                 .orElseThrow(() -> new RuntimeException("Candidature introuvable."));
 
         candidature.setStatut(normalizeStatus(status));
-        return toResponse(candidatureRepository.save(candidature), null);
+        Candidature savedCandidature = candidatureRepository.save(candidature);
+        notifyCandidateForStatusChange(savedCandidature);
+        return toResponse(savedCandidature, null);
     }
 
     public boolean hasApplied(Long offerId, Long candidateId) {
@@ -226,6 +233,50 @@ public class ApplicationService {
         }
 
         return safe(recruiter.getNom());
+    }
+
+    private void notifyRecruiterForNewApplication(Candidature candidature) {
+        if (candidature == null || candidature.getOffre() == null || candidature.getOffre().getRecruiter() == null) {
+            return;
+        }
+
+        Recruiter recruiter = candidature.getOffre().getRecruiter();
+        Candidate candidate = candidature.getCandidate();
+        String offerTitle = safe(candidature.getOffre().getTitre());
+        String candidateName = candidate == null ? "Un candidat" : nonEmpty(candidate.getNom(), "Un candidat");
+
+        notificationService.notifyUser(
+                recruiter,
+                candidateName + " a postule a votre offre \"" + offerTitle + "\"."
+        );
+    }
+
+    private void notifyCandidateForStatusChange(Candidature candidature) {
+        if (candidature == null || candidature.getCandidate() == null || candidature.getOffre() == null) {
+            return;
+        }
+
+        String normalizedStatus = normalizeStatus(candidature.getStatut());
+        if (!STATUS_ENTRETIEN.equals(normalizedStatus)
+                && !STATUS_REFUSE.equals(normalizedStatus)
+                && !STATUS_RETENU.equals(normalizedStatus)) {
+            return;
+        }
+
+        Candidate candidate = candidature.getCandidate();
+        String offerTitle = safe(candidature.getOffre().getTitre());
+        String companyName = resolveCompanyName(candidature.getOffre().getRecruiter());
+        String message;
+
+        if (STATUS_ENTRETIEN.equals(normalizedStatus)) {
+            message = "Votre candidature pour \"" + offerTitle + "\" chez " + companyName + " est passee au statut Entretien.";
+        } else if (STATUS_REFUSE.equals(normalizedStatus)) {
+            message = "Votre candidature pour \"" + offerTitle + "\" chez " + companyName + " a ete refusee.";
+        } else {
+            message = "Bonne nouvelle. Votre candidature pour \"" + offerTitle + "\" chez " + companyName + " a ete retenue.";
+        }
+
+        notificationService.notifyUser(candidate, message);
     }
 
     private String formatDate(Date value) {

@@ -9,6 +9,8 @@ import org.springframework.stereotype.Repository;
 public interface OffreRepository extends JpaRepository<Offre, Long> {
     List<Offre> findAllByOrderByDateDesc();
 
+    List<Offre> findByStatutIgnoreCaseOrderByDateDesc(String statut);
+
     List<Offre> findByRecruiter_IdOrderByDateDesc(Long recruiterId);
 
     void deleteByRecruiter_Id(Long recruiterId);

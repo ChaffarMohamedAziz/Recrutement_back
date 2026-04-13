@@ -11,6 +11,7 @@ public class CandidateProfileResponse {
     private String address;
     private String gender;
     private String description;
+    private String experienceJson;
     private String educationJson;
     private String skillsJson;
     private String facebook;
@@ -23,6 +24,7 @@ public class CandidateProfileResponse {
     private String coverPhotoUrl;
     private String cvFileName;
     private String cvFileSize;
+    private String cvFileUrl;
 
     public Long getId() {
         return id;
@@ -102,6 +104,14 @@ public class CandidateProfileResponse {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getExperienceJson() {
+        return experienceJson;
+    }
+
+    public void setExperienceJson(String experienceJson) {
+        this.experienceJson = experienceJson;
     }
 
     public String getEducationJson() {
@@ -198,5 +208,13 @@ public class CandidateProfileResponse {
 
     public void setCvFileSize(String cvFileSize) {
         this.cvFileSize = cvFileSize;
+    }
+
+    public String getCvFileUrl() {
+        return cvFileUrl;
+    }
+
+    public void setCvFileUrl(String cvFileUrl) {
+        this.cvFileUrl = cvFileUrl;
     }
 }

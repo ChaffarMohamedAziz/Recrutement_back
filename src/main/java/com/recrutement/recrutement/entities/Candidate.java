@@ -21,11 +21,17 @@ public class Candidate extends User {
     private String description;
     private int experience;
     private String photoProfilNom;
+    private String photoProfilUrl;
+    private String photoProfilPublicId;
     private String photoCouvertureNom;
+    private String photoCouvertureUrl;
+    private String photoCouverturePublicId;
     private String facebookUrl;
     private String instagramUrl;
     private String linkedinUrl;
     private String githubUrl;
+    @Column(columnDefinition = "TEXT")
+    private String experiencesJson;
     @Column(columnDefinition = "TEXT")
     private String educationJson;
     @Column(columnDefinition = "TEXT")
@@ -124,12 +130,44 @@ public class Candidate extends User {
         this.photoProfilNom = photoProfilNom;
     }
 
+    public String getPhotoProfilUrl() {
+        return photoProfilUrl;
+    }
+
+    public void setPhotoProfilUrl(String photoProfilUrl) {
+        this.photoProfilUrl = photoProfilUrl;
+    }
+
+    public String getPhotoProfilPublicId() {
+        return photoProfilPublicId;
+    }
+
+    public void setPhotoProfilPublicId(String photoProfilPublicId) {
+        this.photoProfilPublicId = photoProfilPublicId;
+    }
+
     public String getPhotoCouvertureNom() {
         return photoCouvertureNom;
     }
 
     public void setPhotoCouvertureNom(String photoCouvertureNom) {
         this.photoCouvertureNom = photoCouvertureNom;
+    }
+
+    public String getPhotoCouvertureUrl() {
+        return photoCouvertureUrl;
+    }
+
+    public void setPhotoCouvertureUrl(String photoCouvertureUrl) {
+        this.photoCouvertureUrl = photoCouvertureUrl;
+    }
+
+    public String getPhotoCouverturePublicId() {
+        return photoCouverturePublicId;
+    }
+
+    public void setPhotoCouverturePublicId(String photoCouverturePublicId) {
+        this.photoCouverturePublicId = photoCouverturePublicId;
     }
 
     public String getFacebookUrl() {
@@ -162,6 +200,14 @@ public class Candidate extends User {
 
     public void setGithubUrl(String githubUrl) {
         this.githubUrl = githubUrl;
+    }
+
+    public String getExperiencesJson() {
+        return experiencesJson;
+    }
+
+    public void setExperiencesJson(String experiencesJson) {
+        this.experiencesJson = experiencesJson;
     }
 
     public String getEducationJson() {

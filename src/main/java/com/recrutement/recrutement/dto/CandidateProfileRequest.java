@@ -12,6 +12,7 @@ public class CandidateProfileRequest {
     private String address;
     private String gender;
     private String description;
+    private List<CandidateExperienceRequest> experiences;
     private List<CandidateEducationRequest> education;
     private List<CandidateSkillRequest> skills;
     private CandidateSocialLinksRequest socialLinks;
@@ -88,6 +89,14 @@ public class CandidateProfileRequest {
         this.description = description;
     }
 
+    public List<CandidateExperienceRequest> getExperiences() {
+        return experiences;
+    }
+
+    public void setExperiences(List<CandidateExperienceRequest> experiences) {
+        this.experiences = experiences;
+    }
+
     public List<CandidateEducationRequest> getEducation() {
         return education;
     }
@@ -110,6 +119,54 @@ public class CandidateProfileRequest {
 
     public void setSocialLinks(CandidateSocialLinksRequest socialLinks) {
         this.socialLinks = socialLinks;
+    }
+
+    public static class CandidateExperienceRequest {
+        private String title;
+        private String company;
+        private String location;
+        private String period;
+        private String description;
+
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
+        }
+
+        public String getCompany() {
+            return company;
+        }
+
+        public void setCompany(String company) {
+            this.company = company;
+        }
+
+        public String getLocation() {
+            return location;
+        }
+
+        public void setLocation(String location) {
+            this.location = location;
+        }
+
+        public String getPeriod() {
+            return period;
+        }
+
+        public void setPeriod(String period) {
+            this.period = period;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public void setDescription(String description) {
+            this.description = description;
+        }
     }
 
     public static class CandidateEducationRequest {

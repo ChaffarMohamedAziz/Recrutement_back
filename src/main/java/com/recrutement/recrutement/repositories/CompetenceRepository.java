@@ -2,6 +2,7 @@ package com.recrutement.recrutement.repositories;
 
 import com.recrutement.recrutement.entities.Competence;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -14,6 +15,8 @@ public interface CompetenceRepository extends JpaRepository<Competence, Long> {
     List<Competence> findByNomContainingIgnoreCaseOrderByTypeAscNomAsc(String nom);
 
     List<Competence> findByNomContainingIgnoreCaseAndTypeIgnoreCaseOrderByNomAsc(String nom, String type);
+
+    Optional<Competence> findFirstByNomIgnoreCase(String nom);
 
     boolean existsByNomIgnoreCase(String nom);
 

@@ -22,6 +22,8 @@ public class CV {
 
     private String nomFichier;
     private String taille;
+    private String urlFichier;
+    private String cloudinaryPublicId;
 
     @ManyToOne
     @JoinColumn(name = "candidate_id")

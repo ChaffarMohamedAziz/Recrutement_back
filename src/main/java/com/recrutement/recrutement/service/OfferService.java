@@ -53,7 +53,7 @@ public class OfferService {
 
     public List<OffreResponse> getAllOffers(User currentUser) {
         Candidate candidate = resolveCandidate(currentUser);
-        return offreRepository.findAllByOrderByDateDesc().stream()
+        return offreRepository.findByStatutIgnoreCaseOrderByDateDesc("PUBLIEE").stream()
                 .filter(this::isOfferActive)
                 .map(offre -> toResponse(offre, candidate))
                 .collect(Collectors.toList());
@@ -82,7 +82,7 @@ public class OfferService {
         Offre offre = new Offre();
         applyRequest(offre, request);
         offre.setRecruiter(recruiter);
-        offre.setDate(new Date());
+        offre.setDate(java.sql.Date.valueOf(LocalDate.now()));
 
         return toResponse(offreRepository.save(offre), null);
     }
@@ -196,7 +196,7 @@ public class OfferService {
 
     private boolean isOfferActive(Offre offre) {
         String status = normalize(offre.getStatut()).toUpperCase(Locale.ROOT);
-        if ("BROUILLON".equals(status) || "ARCHIVEE".equals(status) || "FERMEE".equals(status)) {
+        if (!"PUBLIEE".equals(status)) {
             return false;
         }
 
@@ -258,7 +258,7 @@ public class OfferService {
 
         try {
             LocalDate localDate = LocalDate.parse(normalized);
-            return Date.from(localDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+            return java.sql.Date.valueOf(localDate);
         } catch (DateTimeParseException ex) {
             throw new RuntimeException("La date d'expiration est invalide.");
         }
