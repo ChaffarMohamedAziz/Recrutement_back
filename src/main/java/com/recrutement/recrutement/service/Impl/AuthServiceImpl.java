@@ -2,6 +2,7 @@ package com.recrutement.recrutement.service.Impl;
 
 import com.recrutement.recrutement.dto.AdminRegisterRequest;
 import com.recrutement.recrutement.dto.CandidateRegisterRequest;
+import com.recrutement.recrutement.dto.ChangePasswordRequest;
 import com.recrutement.recrutement.dto.ForgotPasswordRequest;
 import com.recrutement.recrutement.dto.LoginRequest;
 import com.recrutement.recrutement.dto.LoginResponse;
@@ -19,9 +20,14 @@ import com.recrutement.recrutement.entities.Recruiter;
 import com.recrutement.recrutement.entities.Role;
 import com.recrutement.recrutement.entities.User;
 import com.recrutement.recrutement.repositories.CVRepository;
+import com.recrutement.recrutement.repositories.AiTestRepository;
+import com.recrutement.recrutement.repositories.AiAnswerRepository;
+import com.recrutement.recrutement.repositories.AiQuestionRepository;
+import com.recrutement.recrutement.repositories.AiTestResultRepository;
 import com.recrutement.recrutement.repositories.CandidateRepository;
 import com.recrutement.recrutement.repositories.CandidatureRepository;
 import com.recrutement.recrutement.repositories.ConversationMessageRepository;
+import com.recrutement.recrutement.repositories.InterviewRepository;
 import com.recrutement.recrutement.repositories.OffreRepository;
 import com.recrutement.recrutement.repositories.RecruiterRepository;
 import com.recrutement.recrutement.repositories.UserRepository;
@@ -50,6 +56,11 @@ public class AuthServiceImpl implements AuthService {
     private final CandidateRepository candidateRepository;
     private final RecruiterRepository recruiterRepository;
     private final CVRepository cvRepository;
+    private final AiTestRepository aiTestRepository;
+    private final AiAnswerRepository aiAnswerRepository;
+    private final AiQuestionRepository aiQuestionRepository;
+    private final AiTestResultRepository aiTestResultRepository;
+    private final InterviewRepository interviewRepository;
     private final OffreRepository offreRepository;
     private final CandidatureRepository candidatureRepository;
     private final ConversationMessageRepository conversationMessageRepository;
@@ -63,6 +74,11 @@ public class AuthServiceImpl implements AuthService {
             CandidateRepository candidateRepository,
             RecruiterRepository recruiterRepository,
             CVRepository cvRepository,
+            AiTestRepository aiTestRepository,
+            AiAnswerRepository aiAnswerRepository,
+            AiQuestionRepository aiQuestionRepository,
+            AiTestResultRepository aiTestResultRepository,
+            InterviewRepository interviewRepository,
             OffreRepository offreRepository,
             CandidatureRepository candidatureRepository,
             ConversationMessageRepository conversationMessageRepository,
@@ -75,6 +91,11 @@ public class AuthServiceImpl implements AuthService {
         this.candidateRepository = candidateRepository;
         this.recruiterRepository = recruiterRepository;
         this.cvRepository = cvRepository;
+        this.aiTestRepository = aiTestRepository;
+        this.aiAnswerRepository = aiAnswerRepository;
+        this.aiQuestionRepository = aiQuestionRepository;
+        this.aiTestResultRepository = aiTestResultRepository;
+        this.interviewRepository = interviewRepository;
         this.offreRepository = offreRepository;
         this.candidatureRepository = candidatureRepository;
         this.conversationMessageRepository = conversationMessageRepository;
@@ -383,9 +404,9 @@ public class AuthServiceImpl implements AuthService {
 
         try {
             emailService.sendRecruiterApprovedEmail(user.getEmail(), user.getNom());
-        } catch (RuntimeException ex) {
+        } catch (Exception ex) {
             emailSent = false;
-            logger.error("Echec d'envoi de l'email d'approbation au recruteur {}", user.getEmail(), ex);
+            logger.error("Echec d'envoi de l'email d'approbation au recruteur {}: {}", user.getEmail(), ex.getMessage(), ex);
         }
 
         return RegisterResponse.builder()
@@ -426,9 +447,9 @@ public class AuthServiceImpl implements AuthService {
 
         try {
             emailService.sendRecruiterRejectedEmail(user.getEmail(), user.getNom());
-        } catch (RuntimeException ex) {
+        } catch (Exception ex) {
             emailSent = false;
-            logger.error("Echec d'envoi de l'email de refus au recruteur {}", user.getEmail(), ex);
+            logger.error("Echec d'envoi de l'email de refus au recruteur {}: {}", user.getEmail(), ex.getMessage(), ex);
         }
 
         return new MessageResponse(
@@ -471,6 +492,8 @@ public class AuthServiceImpl implements AuthService {
         }
 
         clearMessagingForRecruiter(recruiterId, user);
+        deleteAiTestsByIds(aiTestRepository.findIdsByRecruiterId(recruiterId));
+        interviewRepository.deleteByRecruiterId(recruiterId);
         candidatureRepository.deleteAllForRecruiter(recruiterId);
         offreRepository.deleteByRecruiter_Id(recruiterId);
         notificationService.clearNotificationsForUser(user);
@@ -560,6 +583,8 @@ public class AuthServiceImpl implements AuthService {
 
         if (user instanceof Recruiter) {
             clearMessagingForRecruiter(userId, user);
+            deleteAiTestsByIds(aiTestRepository.findIdsByRecruiterId(userId));
+            interviewRepository.deleteByRecruiterId(userId);
             candidatureRepository.deleteAllForRecruiter(userId);
             offreRepository.deleteByRecruiter_Id(userId);
             notificationService.clearNotificationsForUser(user);
@@ -569,6 +594,8 @@ public class AuthServiceImpl implements AuthService {
 
         if (user instanceof Candidate) {
             clearMessagingForCandidate(userId, user);
+            deleteAiTestsByIds(aiTestRepository.findIdsByCandidateId(userId));
+            interviewRepository.deleteByCandidateId(userId);
             cvRepository.deleteAllForCandidate(userId);
             candidatureRepository.deleteAllForCandidate(userId);
             notificationService.clearNotificationsForUser(user);
@@ -633,6 +660,50 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
 
         return new MessageResponse(true, "Votre mot de passe a ete reinitialise avec succes.");
+    }
+
+    @Override
+    public MessageResponse changePassword(User currentUser, ChangePasswordRequest request) {
+        if (currentUser == null || currentUser.getId() == null) {
+            return new MessageResponse(false, "Utilisateur non authentifie.");
+        }
+
+        if (request == null) {
+            return new MessageResponse(false, "La demande de changement de mot de passe est invalide.");
+        }
+
+        String currentPassword = request.getCurrentPassword() == null ? "" : request.getCurrentPassword().trim();
+        String newPassword = request.getNewPassword() == null ? "" : request.getNewPassword().trim();
+
+        if (currentPassword.isEmpty()) {
+            return new MessageResponse(false, "Le mot de passe actuel est obligatoire.");
+        }
+
+        if (newPassword.isEmpty()) {
+            return new MessageResponse(false, "Le nouveau mot de passe est obligatoire.");
+        }
+
+        if (newPassword.length() < 6) {
+            return new MessageResponse(false, "Le nouveau mot de passe doit contenir au moins 6 caracteres.");
+        }
+
+        User persistedUser = userRepository.findById(currentUser.getId()).orElse(null);
+        if (persistedUser == null) {
+            return new MessageResponse(false, "Utilisateur introuvable.");
+        }
+
+        if (!passwordEncoder.matches(currentPassword, persistedUser.getPassword())) {
+            return new MessageResponse(false, "Le mot de passe actuel est incorrect.");
+        }
+
+        if (passwordEncoder.matches(newPassword, persistedUser.getPassword())) {
+            return new MessageResponse(false, "Le nouveau mot de passe doit etre different de l'ancien.");
+        }
+
+        persistedUser.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(persistedUser);
+
+        return new MessageResponse(true, "Votre mot de passe a ete modifie avec succes.");
     }
 
     private LoginResponse buildLoginResponse(User user, String message) {
@@ -840,5 +911,16 @@ public class AuthServiceImpl implements AuthService {
 
         conversationMessageRepository.deleteAllByUserId(user.getId());
         return candidatureIds;
+    }
+
+    private void deleteAiTestsByIds(List<Long> aiTestIds) {
+        if (aiTestIds == null || aiTestIds.isEmpty()) {
+            return;
+        }
+
+        aiAnswerRepository.deleteByAiTestIds(aiTestIds);
+        aiQuestionRepository.deleteByAiTestIds(aiTestIds);
+        aiTestResultRepository.deleteByAiTestIds(aiTestIds);
+        aiTestRepository.deleteByIds(aiTestIds);
     }
 }

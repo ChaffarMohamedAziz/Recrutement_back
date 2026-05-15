@@ -1,6 +1,7 @@
 package com.recrutement.recrutement.service;
 
 import com.recrutement.recrutement.dto.*;
+import com.recrutement.recrutement.entities.User;
 import java.util.List;
 
 public interface AuthService {
@@ -33,4 +34,6 @@ public interface AuthService {
     MessageResponse forgotPassword(ForgotPasswordRequest request);
 
     MessageResponse resetPassword(ResetPasswordRequest request);
+
+    MessageResponse changePassword(User currentUser, ChangePasswordRequest request);
 }

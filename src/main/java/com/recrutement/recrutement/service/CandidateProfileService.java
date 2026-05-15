@@ -66,6 +66,21 @@ public class CandidateProfileService {
         return buildResponse(candidate);
     }
 
+    public CandidateProfileResponse getProfileForRecruiter(User user, Long candidateId) {
+        if (user == null || user.getRole() != Role.RECRUITER) {
+            throw new RuntimeException("Cette consultation est reservee aux recruteurs.");
+        }
+
+        if (candidateId == null) {
+            throw new RuntimeException("Identifiant candidat manquant.");
+        }
+
+        Candidate candidate = candidateRepository.findById(candidateId)
+                .orElseThrow(() -> new RuntimeException("Profil candidat introuvable."));
+
+        return buildResponse(candidate);
+    }
+
     public CandidateProfileAutofillResponse extractProfileFromCv(User user, MultipartFile cvFile) {
         getCurrentCandidate(user);
         CandidateProfileAutofillResponse response = groqCvAutofillService.extractFromCv(cvFile);

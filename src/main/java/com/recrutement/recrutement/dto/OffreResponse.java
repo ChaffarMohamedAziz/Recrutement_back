@@ -18,9 +18,17 @@ public class OffreResponse {
     private String dateExpiration;
     private String nomEntreprise;
     private Long recruiterId;
+    private Long candidaturesCount;
     private Double compatibilityScore;
     private Boolean alreadyApplied;
+    private Long applicationId;
     private String applicationStatus;
+    private Boolean hasAiTest;
+    private Boolean aiTestAvailable;
+    private Long aiTestId;
+    private String aiTestStatus;
+    private String aiTestResultStatus;
+    private Boolean canPassAiTest;
     private List<OffreCompetenceResponse> competences;
 
     public Long getId() {
@@ -143,6 +151,14 @@ public class OffreResponse {
         this.recruiterId = recruiterId;
     }
 
+    public Long getCandidaturesCount() {
+        return candidaturesCount;
+    }
+
+    public void setCandidaturesCount(Long candidaturesCount) {
+        this.candidaturesCount = candidaturesCount;
+    }
+
     public Double getCompatibilityScore() {
         return compatibilityScore;
     }
@@ -165,6 +181,62 @@ public class OffreResponse {
 
     public void setApplicationStatus(String applicationStatus) {
         this.applicationStatus = applicationStatus;
+    }
+
+    public Long getApplicationId() {
+        return applicationId;
+    }
+
+    public void setApplicationId(Long applicationId) {
+        this.applicationId = applicationId;
+    }
+
+    public Boolean getHasAiTest() {
+        return hasAiTest;
+    }
+
+    public void setHasAiTest(Boolean hasAiTest) {
+        this.hasAiTest = hasAiTest;
+    }
+
+    public Boolean getAiTestAvailable() {
+        return aiTestAvailable;
+    }
+
+    public void setAiTestAvailable(Boolean aiTestAvailable) {
+        this.aiTestAvailable = aiTestAvailable;
+    }
+
+    public Long getAiTestId() {
+        return aiTestId;
+    }
+
+    public void setAiTestId(Long aiTestId) {
+        this.aiTestId = aiTestId;
+    }
+
+    public String getAiTestStatus() {
+        return aiTestStatus;
+    }
+
+    public void setAiTestStatus(String aiTestStatus) {
+        this.aiTestStatus = aiTestStatus;
+    }
+
+    public String getAiTestResultStatus() {
+        return aiTestResultStatus;
+    }
+
+    public void setAiTestResultStatus(String aiTestResultStatus) {
+        this.aiTestResultStatus = aiTestResultStatus;
+    }
+
+    public Boolean getCanPassAiTest() {
+        return canPassAiTest;
+    }
+
+    public void setCanPassAiTest(Boolean canPassAiTest) {
+        this.canPassAiTest = canPassAiTest;
     }
 
     public List<OffreCompetenceResponse> getCompetences() {

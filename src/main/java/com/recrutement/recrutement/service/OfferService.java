@@ -7,24 +7,46 @@ import com.recrutement.recrutement.dto.OffreCompetenceRequest;
 import com.recrutement.recrutement.dto.OffreCompetenceResponse;
 import com.recrutement.recrutement.dto.OffreRequest;
 import com.recrutement.recrutement.dto.OffreResponse;
+import com.recrutement.recrutement.dto.CandidateTopMatchingOfferResponse;
+import com.recrutement.recrutement.dto.MatchingCandidateResponse;
+import com.recrutement.recrutement.dto.MessageResponse;
+import com.recrutement.recrutement.entities.AiTest;
+import com.recrutement.recrutement.entities.AiTestResult;
+import com.recrutement.recrutement.entities.CandidateInvitation;
 import com.recrutement.recrutement.entities.Candidate;
+import com.recrutement.recrutement.entities.Candidature;
+import com.recrutement.recrutement.entities.Competence;
+import com.recrutement.recrutement.entities.InvitationStatus;
 import com.recrutement.recrutement.entities.Offre;
 import com.recrutement.recrutement.entities.Recruiter;
 import com.recrutement.recrutement.entities.Role;
 import com.recrutement.recrutement.entities.User;
+import com.recrutement.recrutement.repositories.AiTestRepository;
+import com.recrutement.recrutement.repositories.AiAnswerRepository;
+import com.recrutement.recrutement.repositories.AiQuestionRepository;
+import com.recrutement.recrutement.repositories.AiTestResultRepository;
 import com.recrutement.recrutement.repositories.CandidateRepository;
+import com.recrutement.recrutement.repositories.CandidateInvitationRepository;
 import com.recrutement.recrutement.repositories.CandidatureRepository;
+import com.recrutement.recrutement.repositories.ConversationMessageRepository;
+import com.recrutement.recrutement.repositories.InterviewRepository;
 import com.recrutement.recrutement.repositories.OffreRepository;
 import com.recrutement.recrutement.repositories.RecruiterRepository;
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OfferService {
@@ -32,7 +54,18 @@ public class OfferService {
     private final RecruiterRepository recruiterRepository;
     private final CandidateRepository candidateRepository;
     private final CandidatureRepository candidatureRepository;
+    private final ConversationMessageRepository conversationMessageRepository;
+    private final AiTestRepository aiTestRepository;
+    private final AiAnswerRepository aiAnswerRepository;
+    private final AiQuestionRepository aiQuestionRepository;
+    private final AiTestResultRepository aiTestResultRepository;
+    private final InterviewRepository interviewRepository;
+    private final CandidateInvitationRepository candidateInvitationRepository;
     private final MatchingService matchingService;
+    private final CompetenceService competenceService;
+    private final SubscriptionService subscriptionService;
+    private final NotificationService notificationService;
+    private final EmailService emailService;
     private final ObjectMapper objectMapper;
 
     public OfferService(
@@ -40,14 +73,36 @@ public class OfferService {
             RecruiterRepository recruiterRepository,
             CandidateRepository candidateRepository,
             CandidatureRepository candidatureRepository,
+            ConversationMessageRepository conversationMessageRepository,
+            AiTestRepository aiTestRepository,
+            AiAnswerRepository aiAnswerRepository,
+            AiQuestionRepository aiQuestionRepository,
+            AiTestResultRepository aiTestResultRepository,
+            InterviewRepository interviewRepository,
+            CandidateInvitationRepository candidateInvitationRepository,
             MatchingService matchingService,
+            CompetenceService competenceService,
+            SubscriptionService subscriptionService,
+            NotificationService notificationService,
+            EmailService emailService,
             ObjectMapper objectMapper
     ) {
         this.offreRepository = offreRepository;
         this.recruiterRepository = recruiterRepository;
         this.candidateRepository = candidateRepository;
         this.candidatureRepository = candidatureRepository;
+        this.conversationMessageRepository = conversationMessageRepository;
+        this.aiTestRepository = aiTestRepository;
+        this.aiAnswerRepository = aiAnswerRepository;
+        this.aiQuestionRepository = aiQuestionRepository;
+        this.aiTestResultRepository = aiTestResultRepository;
+        this.interviewRepository = interviewRepository;
+        this.candidateInvitationRepository = candidateInvitationRepository;
         this.matchingService = matchingService;
+        this.competenceService = competenceService;
+        this.subscriptionService = subscriptionService;
+        this.notificationService = notificationService;
+        this.emailService = emailService;
         this.objectMapper = objectMapper;
     }
 
@@ -57,6 +112,33 @@ public class OfferService {
                 .filter(this::isOfferActive)
                 .map(offre -> toResponse(offre, candidate))
                 .collect(Collectors.toList());
+    }
+
+    public List<CandidateTopMatchingOfferResponse> getTopMatchingOffersForCandidate(User currentUser, Double minScore) {
+        Candidate candidate = resolveCandidate(currentUser);
+        if (candidate == null) {
+            throw new RuntimeException("Profil candidat introuvable.");
+        }
+
+        double effectiveMinScore = minScore == null ? 70d : Math.max(0d, Math.min(100d, minScore));
+        List<CandidateTopMatchingOfferResponse> rankedOffers = offreRepository.findByStatutIgnoreCaseOrderByDateDesc("PUBLIEE").stream()
+                .filter(this::isOfferActive)
+                .map(offre -> toCandidateTopMatchingOfferResponse(offre, candidate))
+                .sorted(Comparator.comparing(
+                        CandidateTopMatchingOfferResponse::getMatchingScore,
+                        Comparator.nullsLast(Double::compareTo)
+                ).reversed())
+                .collect(Collectors.toList());
+
+        List<CandidateTopMatchingOfferResponse> filtered = rankedOffers.stream()
+                .filter(item -> item.getMatchingScore() != null && item.getMatchingScore() >= effectiveMinScore)
+                .collect(Collectors.toList());
+
+        if (!filtered.isEmpty()) {
+            return filtered;
+        }
+
+        return rankedOffers.stream().limit(3).collect(Collectors.toList());
     }
 
     public OffreResponse getOfferById(Long id, User currentUser) {
@@ -78,6 +160,7 @@ public class OfferService {
         }
 
         Recruiter recruiter = getCurrentRecruiter(currentUser);
+        subscriptionService.assertRecruiterCanPublishOffer(recruiter, true);
 
         Offre offre = new Offre();
         applyRequest(offre, request);
@@ -92,16 +175,150 @@ public class OfferService {
             throw new RuntimeException("Les informations de l'offre sont obligatoires.");
         }
 
-        Recruiter recruiter = getCurrentRecruiter(currentUser);
-        Offre offre = offreRepository.findById(offerId)
-                .orElseThrow(() -> new RuntimeException("Offre introuvable."));
-
-        if (offre.getRecruiter() == null || !offre.getRecruiter().getId().equals(recruiter.getId())) {
-            throw new RuntimeException("Vous ne pouvez modifier que vos propres offres.");
-        }
+        Offre offre = getRecruiterOwnedOffer(currentUser, offerId, "modifier");
 
         applyRequest(offre, request);
         return toResponse(offreRepository.save(offre), null);
+    }
+
+    public List<MatchingCandidateResponse> getMatchingCandidates(User currentUser, Long offerId, Double minScore) {
+        Offre offer = getRecruiterOwnedOffer(currentUser, offerId, "consulter");
+        double effectiveMinScore = minScore == null ? 70d : Math.max(0d, Math.min(100d, minScore));
+
+        return candidateRepository.findAll().stream()
+                .map(candidate -> toMatchingCandidateResponse(offer, candidate))
+                .filter(item -> item.getMatchingScore() != null && item.getMatchingScore() >= effectiveMinScore)
+                .sorted((left, right) -> Double.compare(
+                        right.getMatchingScore() == null ? 0d : right.getMatchingScore(),
+                        left.getMatchingScore() == null ? 0d : left.getMatchingScore()
+                ))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public MessageResponse inviteCandidateToOffer(User currentUser, Long offerId, Long candidateId) {
+        Offre offer = getRecruiterOwnedOffer(currentUser, offerId, "inviter des candidats pour");
+        Candidate candidate = candidateRepository.findById(candidateId)
+                .orElseThrow(() -> new RuntimeException("Candidat introuvable."));
+
+        CandidateInvitation existingInvitation = candidateInvitationRepository
+                .findTopByOffer_IdAndCandidate_IdOrderByInvitedAtDesc(offerId, candidateId)
+                .orElse(null);
+        if (existingInvitation != null && existingInvitation.getStatus() == InvitationStatus.SENT) {
+            return new MessageResponse(true, "Invitation déjà envoyée.");
+        }
+
+        MatchingService.MatchResult matchResult = matchingService.evaluate(candidate, offer);
+        Recruiter recruiter = offer.getRecruiter();
+        CandidateInvitation invitation = CandidateInvitation.builder()
+                .offer(offer)
+                .recruiter(recruiter)
+                .candidate(candidate)
+                .matchingScore(matchResult.getScore())
+                .status(InvitationStatus.SENT)
+                .invitedAt(new Date())
+                .build();
+        candidateInvitationRepository.save(invitation);
+
+        String companyName = resolveCompanyName(recruiter);
+        String recruiterName = safe(recruiter == null ? null : recruiter.getNom());
+        String subject = "Invitation à postuler — " + safe(offer.getTitre());
+        String emailBody = "Bonjour " + nonEmpty(candidate.getNom(), "Candidat") + ",\n\n"
+                + "Votre profil correspond fortement à une offre publiée par " + nonEmpty(companyName, "notre entreprise") + ".\n\n"
+                + "Poste : " + safe(offer.getTitre()) + "\n"
+                + "Score de compatibilité estimé : " + roundScore(matchResult.getScore()) + " %\n\n"
+                + "Nous vous invitons à consulter cette offre et à postuler si elle vous intéresse.\n\n"
+                + "Cordialement,\n"
+                + nonEmpty(recruiterName, "Recruteur") + "\n"
+                + nonEmpty(companyName, "Entreprise");
+
+        try {
+            emailService.sendCandidateInvitationEmail(candidate.getEmail(), subject, emailBody);
+        } catch (RuntimeException ex) {
+            throw new RuntimeException(ex.getMessage() == null || ex.getMessage().isBlank()
+                    ? "Invitation enregistrée, mais l'envoi d'email a échoué."
+                    : ex.getMessage());
+        }
+
+        notificationService.notifyUser(
+                candidate,
+                "Invitation à postuler pour l'offre \"" + safe(offer.getTitre()) + "\" chez " + nonEmpty(companyName, "une entreprise") + "."
+        );
+
+        return new MessageResponse(true, "Invitation envoyée avec succès.");
+    }
+
+    @Transactional
+    public OffreResponse archiveOffer(User currentUser, Long offerId) {
+        Offre offre = getRecruiterOwnedOffer(currentUser, offerId, "archiver");
+        String currentStatus = normalizeStatus(offre.getStatut());
+        if ("ARCHIVEE".equals(currentStatus)) {
+            return toResponse(offre, null);
+        }
+
+        offre.setStatut("ARCHIVEE");
+        return toResponse(offreRepository.save(offre), null);
+    }
+
+    @Transactional
+    public OffreResponse unarchiveOffer(User currentUser, Long offerId) {
+        Offre offre = getRecruiterOwnedOffer(currentUser, offerId, "desarchiver");
+        subscriptionService.assertRecruiterCanPublishOffer(getCurrentRecruiter(currentUser), true);
+        String currentStatus = normalizeStatus(offre.getStatut());
+        if ("PUBLIEE".equals(currentStatus)) {
+            return toResponse(offre, null);
+        }
+
+        offre.setStatut("PUBLIEE");
+        if (offre.getDate() == null) {
+            offre.setDate(java.sql.Date.valueOf(LocalDate.now()));
+        }
+        return toResponse(offreRepository.save(offre), null);
+    }
+
+    @Transactional
+    public String deleteOffer(User currentUser, Long offerId) {
+        Offre offre = getRecruiterOwnedOffer(currentUser, offerId, "supprimer");
+        Long targetOfferId = offre.getId();
+
+        deleteAiTestsForOffer(targetOfferId);
+        interviewRepository.deleteByOfferId(targetOfferId);
+
+        List<Long> candidatureIds = candidatureRepository.findIdsByOfferId(targetOfferId);
+        if (!candidatureIds.isEmpty()) {
+            conversationMessageRepository.deleteAllByCandidatureIds(candidatureIds);
+            candidatureRepository.deleteAllForOffer(targetOfferId);
+        }
+
+        offreRepository.delete(offre);
+        return "L'offre a ete supprimee avec succes.";
+    }
+
+    private void deleteAiTestsByIds(List<Long> aiTestIds) {
+        if (aiTestIds == null || aiTestIds.isEmpty()) {
+            return;
+        }
+
+        aiAnswerRepository.deleteByAiTestIds(aiTestIds);
+        aiQuestionRepository.deleteByAiTestIds(aiTestIds);
+        aiTestResultRepository.deleteByAiTestIds(aiTestIds);
+        aiTestRepository.deleteByIds(aiTestIds);
+        aiTestRepository.flush();
+    }
+
+    private void deleteAiTestsForOffer(Long offerId) {
+        if (offerId == null) {
+            return;
+        }
+
+        List<Long> aiTestIds = aiTestRepository.findIdsByOfferId(offerId);
+        if (aiTestIds != null && !aiTestIds.isEmpty()) {
+            aiAnswerRepository.deleteByAiTestIds(aiTestIds);
+            aiQuestionRepository.deleteByAiTestIds(aiTestIds);
+            aiTestResultRepository.deleteByAiTestIds(aiTestIds);
+        }
+        aiTestRepository.deleteByOfferId(offerId);
+        aiTestRepository.flush();
     }
 
     private void applyRequest(Offre offre, OffreRequest request) {
@@ -114,7 +331,7 @@ public class OfferService {
         offre.setDevise(defaultValue(request.getDevise(), "TND"));
         offre.setNombrePostes(request.getNombrePostes() == null ? 1 : request.getNombrePostes());
         offre.setExperienceRequise(defaultValue(request.getExperienceRequise(), "Non precisee"));
-        offre.setStatut(defaultValue(request.getStatut(), "PUBLIEE"));
+        offre.setStatut(normalizeStatus(defaultValue(request.getStatut(), "PUBLIEE")));
         offre.setDateExpiration(parseDate(request.getDateExpiration()));
         offre.setCompetencesJson(writeCompetencesJson(request.getCompetences()));
     }
@@ -135,6 +352,7 @@ public class OfferService {
         response.setDatePublication(formatDate(offre.getDate()));
         response.setDateExpiration(formatDate(offre.getDateExpiration()));
         response.setCompetences(readCompetencesJson(offre.getCompetencesJson()));
+        response.setCandidaturesCount(candidatureRepository.countByOffre_Id(offre.getId()));
 
         if (offre.getRecruiter() != null) {
             response.setRecruiterId(offre.getRecruiter().getId());
@@ -147,16 +365,96 @@ public class OfferService {
 
         if (candidate != null) {
             response.setCompatibilityScore(matchingService.evaluate(candidate, offre).getScore());
-            response.setAlreadyApplied(candidatureRepository.findByCandidate_IdAndOffre_Id(candidate.getId(), offre.getId()).isPresent());
-            response.setApplicationStatus(candidatureRepository.findByCandidate_IdAndOffre_Id(candidate.getId(), offre.getId())
-                    .map(candidature -> candidature.getStatut())
-                    .orElse(null));
+            Candidature application = candidatureRepository.findByCandidate_IdAndOffre_Id(candidate.getId(), offre.getId()).orElse(null);
+            response.setAlreadyApplied(application != null);
+            response.setApplicationId(application == null ? null : application.getId());
+            response.setApplicationStatus(application == null ? null : AiTestService.normalizeApplicationStatus(application.getStatut()));
+            applyAiTestState(response, offre, application);
         } else {
             response.setCompatibilityScore(null);
             response.setAlreadyApplied(Boolean.FALSE);
+            response.setApplicationId(null);
             response.setApplicationStatus(null);
+            response.setHasAiTest(Boolean.FALSE);
+            response.setAiTestAvailable(Boolean.FALSE);
+            response.setAiTestId(null);
+            response.setAiTestStatus(null);
+            response.setAiTestResultStatus(null);
+            response.setCanPassAiTest(Boolean.FALSE);
         }
 
+        return response;
+    }
+
+    private void applyAiTestState(OffreResponse response, Offre offre, Candidature application) {
+        AiTest applicationAiTest = application == null
+                ? null
+                : aiTestRepository.findTopByApplication_IdOrderByCreatedAtDesc(application.getId()).orElse(null);
+
+        AiTest offerTemplate = aiTestRepository.findTopByJobOffer_IdAndApplicationIsNullOrderByCreatedAtDesc(offre.getId()).orElse(null);
+        String templateStatus = offerTemplate == null ? null : AiTestService.normalizeAiTestStatus(offerTemplate.getStatus());
+        boolean hasValidatedTemplate = "VALIDATED".equals(templateStatus) || "PUBLISHED".equals(templateStatus);
+
+        AiTest effectiveTest = applicationAiTest != null ? applicationAiTest : offerTemplate;
+        AiTestResult result = applicationAiTest == null ? null : aiTestResultRepository.findByAiTest_Id(applicationAiTest.getId()).orElse(null);
+        String aiTestStatus = effectiveTest == null ? null : AiTestService.normalizeAiTestStatus(effectiveTest.getStatus());
+        String aiTestResultStatus = result == null ? null : AiTestService.normalizeAiTestStatus(result.getStatus());
+        boolean aiTestAvailable = Boolean.TRUE.equals(response.getAlreadyApplied())
+                && (hasValidatedTemplate || applicationAiTest != null);
+        boolean canPassAiTest = Boolean.TRUE.equals(response.getAlreadyApplied())
+                && hasValidatedTemplate
+                && (applicationAiTest != null || effectiveTest != null)
+                && !"SUBMITTED".equals(aiTestResultStatus)
+                && !"EXPIRED".equals(aiTestResultStatus)
+                && !"CHEATING_SUSPECTED".equals(aiTestResultStatus)
+                && !"CLOSED".equals(aiTestResultStatus);
+
+        response.setHasAiTest(hasValidatedTemplate || applicationAiTest != null);
+        response.setAiTestAvailable(aiTestAvailable);
+        response.setAiTestId(applicationAiTest == null ? null : applicationAiTest.getId());
+        response.setAiTestStatus(aiTestStatus);
+        response.setAiTestResultStatus(aiTestResultStatus);
+        response.setCanPassAiTest(canPassAiTest);
+    }
+
+    private MatchingCandidateResponse toMatchingCandidateResponse(Offre offer, Candidate candidate) {
+        MatchingService.MatchResult matchResult = matchingService.evaluate(candidate, offer);
+        boolean hasApplied = candidate != null
+                && candidate.getId() != null
+                && candidatureRepository.findByCandidate_IdAndOffre_Id(candidate.getId(), offer.getId()).isPresent();
+        boolean alreadyInvited = candidate != null
+                && candidate.getId() != null
+                && candidateInvitationRepository.findTopByOffer_IdAndCandidate_IdOrderByInvitedAtDesc(offer.getId(), candidate.getId())
+                        .map(invitation -> invitation.getStatus() == InvitationStatus.SENT)
+                        .orElse(false);
+
+        MatchingCandidateResponse response = new MatchingCandidateResponse();
+        response.setCandidateId(candidate.getId());
+        response.setFullName(safe(candidate.getNom()));
+        response.setEmail(safe(candidate.getEmail()));
+        response.setProfileTitle(nonEmpty(candidate.getPosteRecherche(), nonEmpty(candidate.getProfession(), "Profil candidat")));
+        response.setLocation(safe(candidate.getLocalisation()));
+        response.setExperience(candidate.getExperience());
+        response.setMatchingScore(matchResult.getScore());
+        response.setCompatibleSkills(matchResult.getMatchingSkills());
+        response.setMissingSkills(matchResult.getMissingSkills());
+        response.setHasApplied(hasApplied);
+        response.setAlreadyInvited(alreadyInvited);
+        return response;
+    }
+
+    private CandidateTopMatchingOfferResponse toCandidateTopMatchingOfferResponse(Offre offer, Candidate candidate) {
+        MatchingService.MatchResult matchResult = matchingService.evaluate(candidate, offer);
+
+        CandidateTopMatchingOfferResponse response = new CandidateTopMatchingOfferResponse();
+        response.setOfferId(offer.getId());
+        response.setTitle(safe(offer.getTitre()));
+        response.setCompanyName(resolveCompanyName(offer.getRecruiter()));
+        response.setLocation(safe(offer.getLocalisation()));
+        response.setContractType(safe(offer.getTypeContrat()));
+        response.setMatchingScore(matchResult.getScore());
+        response.setMatchingSkills(matchResult.getMatchingSkills());
+        response.setMissingSkills(matchResult.getMissingSkills());
         return response;
     }
 
@@ -179,6 +477,18 @@ public class OfferService {
         return recruiter;
     }
 
+    private Offre getRecruiterOwnedOffer(User currentUser, Long offerId, String actionLabel) {
+        Recruiter recruiter = getCurrentRecruiter(currentUser);
+        Offre offre = offreRepository.findById(offerId)
+                .orElseThrow(() -> new RuntimeException("Offre introuvable."));
+
+        if (offre.getRecruiter() == null || !offre.getRecruiter().getId().equals(recruiter.getId())) {
+            throw new RuntimeException("Vous ne pouvez " + actionLabel + " que vos propres offres.");
+        }
+
+        return offre;
+    }
+
     private Candidate resolveCandidate(User currentUser) {
         if (currentUser == null || currentUser.getRole() == null || !"CANDIDATE".equals(currentUser.getRole().name())) {
             return null;
@@ -195,7 +505,7 @@ public class OfferService {
     }
 
     private boolean isOfferActive(Offre offre) {
-        String status = normalize(offre.getStatut()).toUpperCase(Locale.ROOT);
+        String status = normalizeStatus(offre.getStatut());
         if (!"PUBLIEE".equals(status)) {
             return false;
         }
@@ -210,21 +520,120 @@ public class OfferService {
     }
 
     private String writeCompetencesJson(List<OffreCompetenceRequest> competences) {
-        List<OffreCompetenceRequest> safeList = competences == null ? new ArrayList<>() : competences.stream()
-                .filter(item -> item != null && !normalize(item.getNom()).isEmpty())
-                .peek(item -> {
-                    item.setNom(normalize(item.getNom()));
-                    item.setType(defaultValue(item.getType(), "OBLIGATOIRE"));
-                    item.setNiveau(defaultValue(item.getNiveau(), "Intermediaire"));
-                    item.setPonderation(item.getPonderation() == null ? 50 : item.getPonderation());
-                })
-                .collect(Collectors.toList());
+        List<OffreCompetenceRequest> safeList = synchronizeOfferCompetences(competences);
 
         try {
             return objectMapper.writeValueAsString(safeList);
         } catch (JsonProcessingException ex) {
             throw new RuntimeException("Impossible d'enregistrer les competences de l'offre.");
         }
+    }
+
+    private List<OffreCompetenceRequest> synchronizeOfferCompetences(List<OffreCompetenceRequest> competences) {
+        if (competences == null || competences.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        Map<String, OffreCompetenceRequest> uniqueCompetences = new LinkedHashMap<>();
+
+        for (OffreCompetenceRequest competenceRequest : competences) {
+            OffreCompetenceRequest normalized = normalizeOfferCompetence(competenceRequest);
+            if (normalized == null || normalize(normalized.getNom()).isEmpty()) {
+                continue;
+            }
+
+            Competence competence = resolveCompetence(normalized);
+            if (competence != null) {
+                normalized.setCompetenceId(competence.getId());
+                normalized.setNom(competence.getNom());
+            }
+
+            String uniqueKey = competence != null
+                    ? "id:" + competence.getId()
+                    : "nom:" + normalizeToken(normalized.getNom());
+
+            if (uniqueKey.endsWith(":")) {
+                continue;
+            }
+
+            if (uniqueCompetences.containsKey(uniqueKey)) {
+                mergeCompetence(uniqueCompetences.get(uniqueKey), normalized);
+                continue;
+            }
+
+            uniqueCompetences.put(uniqueKey, normalized);
+        }
+
+        return new ArrayList<>(uniqueCompetences.values());
+    }
+
+    private OffreCompetenceRequest normalizeOfferCompetence(OffreCompetenceRequest source) {
+        if (source == null) {
+            return null;
+        }
+
+        OffreCompetenceRequest normalized = new OffreCompetenceRequest();
+        normalized.setCompetenceId(source.getCompetenceId());
+        normalized.setNom(normalize(source.getNom()));
+        normalized.setType(defaultValue(source.getType(), "OBLIGATOIRE"));
+        normalized.setNiveau(defaultValue(source.getNiveau(), "Intermediaire"));
+        normalized.setPonderation(normalizeWeight(source.getPonderation()));
+        return normalized;
+    }
+
+    private Competence resolveCompetence(OffreCompetenceRequest request) {
+        if (request.getCompetenceId() != null) {
+            Optional<Competence> competenceById = competenceService.findById(request.getCompetenceId());
+            if (competenceById.isPresent()) {
+                return competenceById.get();
+            }
+        }
+
+        if (!normalize(request.getNom()).isEmpty()) {
+            Optional<Competence> competenceByName = competenceService.findByNormalizedName(request.getNom());
+            if (competenceByName.isPresent()) {
+                return competenceByName.get();
+            }
+
+            return competenceService.resolveOrCreateCompetence(request.getNom());
+        }
+
+        return null;
+    }
+
+    private void mergeCompetence(OffreCompetenceRequest target, OffreCompetenceRequest source) {
+        if (target.getCompetenceId() == null && source.getCompetenceId() != null) {
+            target.setCompetenceId(source.getCompetenceId());
+        }
+
+        if (normalize(target.getNom()).isEmpty()) {
+            target.setNom(source.getNom());
+        }
+
+        target.setPonderation(Math.max(normalizeWeight(target.getPonderation()), normalizeWeight(source.getPonderation())));
+        target.setType(defaultValue(target.getType(), source.getType()));
+        target.setNiveau(preferHigherLevel(target.getNiveau(), source.getNiveau()));
+    }
+
+    private int normalizeWeight(Integer value) {
+        if (value == null) {
+            return 50;
+        }
+
+        return Math.max(0, Math.min(100, value));
+    }
+
+    private String preferHigherLevel(String first, String second) {
+        return skillLevelRank(second) > skillLevelRank(first) ? defaultValue(second, "Intermediaire") : defaultValue(first, "Intermediaire");
+    }
+
+    private int skillLevelRank(String value) {
+        return switch (defaultValue(value, "Intermediaire").toLowerCase(Locale.ROOT)) {
+            case "expert" -> 4;
+            case "avance" -> 3;
+            case "intermediaire" -> 2;
+            default -> 1;
+        };
     }
 
     private List<OffreCompetenceResponse> readCompetencesJson(String value) {
@@ -272,6 +681,18 @@ public class OfferService {
         return toLocalDate(value).toString();
     }
 
+    private String resolveCompanyName(Recruiter recruiter) {
+        if (recruiter == null) {
+            return "";
+        }
+
+        if (recruiter.getEntreprise() != null && !safe(recruiter.getEntreprise().getNomEntreprise()).isBlank()) {
+            return safe(recruiter.getEntreprise().getNomEntreprise());
+        }
+
+        return safe(recruiter.getNom());
+    }
+
     private LocalDate toLocalDate(Date value) {
         if (value instanceof java.sql.Date sqlDate) {
             return sqlDate.toLocalDate();
@@ -286,6 +707,19 @@ public class OfferService {
         return value == null ? "" : value.trim();
     }
 
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private String nonEmpty(String primary, String fallback) {
+        String normalized = safe(primary);
+        return normalized.isEmpty() ? safe(fallback) : normalized;
+    }
+
+    private double roundScore(double value) {
+        return Math.round(value * 10d) / 10d;
+    }
+
     private String requireValue(String value, String message) {
         String normalized = normalize(value);
         if (normalized.isEmpty()) {
@@ -297,6 +731,22 @@ public class OfferService {
     private String defaultValue(String value, String fallback) {
         String normalized = normalize(value);
         return normalized.isEmpty() ? fallback : normalized;
+    }
+
+    private String normalizeToken(String value) {
+        String ascii = Normalizer.normalize(normalize(value), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "");
+        return ascii.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "");
+    }
+
+    private String normalizeStatus(String value) {
+        String normalized = normalize(value).toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "PUBLISHED" -> "PUBLIEE";
+            case "DRAFT" -> "BROUILLON";
+            case "ARCHIVED" -> "ARCHIVEE";
+            default -> normalized;
+        };
     }
 
     private Recruiter createMissingRecruiterProfile(User authenticatedUser) {

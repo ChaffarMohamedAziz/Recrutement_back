@@ -1,12 +1,18 @@
 package com.recrutement.recrutement.service.Impl;
 
 import com.recrutement.recrutement.service.EmailService;
+import java.io.UnsupportedEncodingException;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
+import jakarta.mail.AuthenticationFailedException;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -15,8 +21,7 @@ import org.springframework.stereotype.Service;
 public class EmailServiceImpl implements EmailService {
     private static final Logger logger = LoggerFactory.getLogger(EmailServiceImpl.class);
 
-    @Autowired
-    private JavaMailSender mailSender;
+    private final JavaMailSender mailSender;
 
     @Value("${app.frontend.url}")
     private String frontendUrl;
@@ -24,121 +29,205 @@ public class EmailServiceImpl implements EmailService {
     @Value("${spring.mail.username}")
     private String fromEmail;
 
+    public EmailServiceImpl(JavaMailSender mailSender) {
+        this.mailSender = mailSender;
+    }
+
     @Override
     public void sendActivationEmail(String toEmail, String fullName, String activationToken) {
-        try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromEmail);
-            helper.setTo(toEmail);
-            helper.setSubject("Activation de votre compte - SmartRecruit");
-
-            String activationLink = frontendUrl + "/verify-email?token=" + activationToken;
-            helper.setText(buildActivationEmailTemplate(fullName, activationLink), true);
-
-            mailSender.send(message);
-            logger.info("Email d'activation envoye a: {}", toEmail);
-        } catch (MessagingException e) {
-            logger.error("Erreur lors de l'envoi de l'email d'activation a: {}", toEmail, e);
-            throw new RuntimeException("Echec de l'envoi de l'email d'activation", e);
-        }
+        String activationLink = frontendUrl + "/verify-email?token=" + activationToken;
+        sendHtmlEmail(
+                toEmail,
+                "Activation de votre compte - SmartRecruit",
+                buildActivationEmailTemplate(fullName, activationLink),
+                "email d'activation"
+        );
     }
 
     @Override
     public void sendRecruiterPendingApprovalEmail(String toEmail, String adminName, String recruiterName, String recruiterEmail) {
-        try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromEmail);
-            helper.setTo(toEmail);
-            helper.setSubject("Nouveau compte recruteur en attente - SmartRecruit");
-            helper.setText(buildRecruiterPendingApprovalTemplate(adminName, recruiterName, recruiterEmail), true);
-
-            mailSender.send(message);
-            logger.info("Email de notification admin envoye a: {}", toEmail);
-        } catch (MessagingException e) {
-            logger.error("Erreur lors de l'envoi de l'email de notification admin a: {}", toEmail, e);
-            throw new RuntimeException("Echec de l'envoi de la notification admin", e);
-        }
+        sendHtmlEmail(
+                toEmail,
+                "Nouveau compte recruteur en attente - SmartRecruit",
+                buildRecruiterPendingApprovalTemplate(adminName, recruiterName, recruiterEmail),
+                "email de notification admin"
+        );
     }
 
     @Override
     public void sendRecruiterApprovedEmail(String toEmail, String fullName) {
-        try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromEmail);
-            helper.setTo(toEmail);
-            helper.setSubject("Votre compte recruteur est actif - SmartRecruit");
-            helper.setText(buildRecruiterApprovedTemplate(fullName), true);
-
-            mailSender.send(message);
-            logger.info("Email d'approbation recruteur envoye a: {}", toEmail);
-        } catch (MessagingException e) {
-            logger.error("Erreur lors de l'envoi de l'email d'approbation a: {}", toEmail, e);
-            throw new RuntimeException("Echec de l'envoi de l'email d'approbation", e);
-        }
+        sendHtmlEmail(
+                toEmail,
+                "Votre compte recruteur est actif - SmartRecruit",
+                buildRecruiterApprovedTemplate(fullName),
+                "email d'approbation recruteur"
+        );
     }
 
     @Override
     public void sendRecruiterRejectedEmail(String toEmail, String fullName) {
-        try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromEmail);
-            helper.setTo(toEmail);
-            helper.setSubject("Votre demande recruteur a ete refusee - SmartRecruit");
-            helper.setText(buildRecruiterRejectedTemplate(fullName), true);
-
-            mailSender.send(message);
-            logger.info("Email de refus recruteur envoye a: {}", toEmail);
-        } catch (MessagingException e) {
-            logger.error("Erreur lors de l'envoi de l'email de refus a: {}", toEmail, e);
-            throw new RuntimeException("Echec de l'envoi de l'email de refus", e);
-        }
+        sendHtmlEmail(
+                toEmail,
+                "Votre demande recruteur a ete refusee - SmartRecruit",
+                buildRecruiterRejectedTemplate(fullName),
+                "email de refus recruteur"
+        );
     }
 
     @Override
     public void sendWelcomeEmail(String toEmail, String fullName) {
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromEmail);
-            helper.setTo(toEmail);
-            helper.setSubject("Bienvenue sur SmartRecruit");
-            helper.setText(buildWelcomeEmailTemplate(fullName), true);
-
-            mailSender.send(message);
-            logger.info("Email de bienvenue envoye a: {}", toEmail);
-        } catch (MessagingException e) {
-            logger.error("Erreur lors de l'envoi de l'email de bienvenue a: {}", toEmail, e);
+            sendHtmlEmail(
+                    toEmail,
+                    "Bienvenue sur SmartRecruit",
+                    buildWelcomeEmailTemplate(fullName),
+                    "email de bienvenue"
+            );
+        } catch (RuntimeException ex) {
+            logger.error("Erreur lors de l'envoi de l'email de bienvenue a {}: {}", toEmail, ex.getMessage(), ex);
         }
     }
 
     @Override
     public void sendPasswordResetEmail(String toEmail, String fullName, String resetToken) {
+        String resetLink = frontendUrl + "/reset-password?token=" + resetToken;
+        sendHtmlEmail(
+                toEmail,
+                "Reinitialisation de votre mot de passe - SmartRecruit",
+                buildPasswordResetTemplate(fullName, resetLink),
+                "email de reinitialisation"
+        );
+    }
+
+    @Override
+    public void sendAiTestRejectionEmail(String toEmail, String subject, String emailBody) {
+        sendHtmlEmail(
+                toEmail,
+                hasText(subject) ? subject : "Suite a votre candidature - SmartRecruit",
+                buildAiRejectionTemplate(emailBody),
+                "email de refus apres test IA"
+        );
+    }
+
+    @Override
+    public void sendInterviewInvitationEmail(String toEmail, String subject, String emailBody) {
+        sendHtmlEmail(
+                toEmail,
+                hasText(subject) ? subject : "Invitation entretien - SmartRecruit",
+                buildInterviewEmailTemplate("Invitation a un entretien", emailBody),
+                "email d'invitation entretien"
+        );
+    }
+
+    @Override
+    public void sendInterviewReminderEmail(String toEmail, String subject, String emailBody) {
+        sendHtmlEmail(
+                toEmail,
+                hasText(subject) ? subject : "Rappel entretien - SmartRecruit",
+                buildInterviewEmailTemplate("Rappel entretien", emailBody),
+                "email de rappel entretien"
+        );
+    }
+
+    @Override
+    public void sendInterviewAbsenceRejectedEmail(String toEmail, String subject, String emailBody) {
+        sendHtmlEmail(
+                toEmail,
+                hasText(subject) ? subject : "Suite a votre entretien - SmartRecruit",
+                buildInterviewEmailTemplate("Suite a votre entretien", emailBody),
+                "email de refus apres absence"
+        );
+    }
+
+    @Override
+    public void sendCandidateInvitationEmail(String toEmail, String subject, String emailBody) {
+        sendHtmlEmail(
+                toEmail,
+                hasText(subject) ? subject : "Invitation a postuler - SmartRecruit",
+                buildInterviewEmailTemplate("Invitation a postuler", emailBody),
+                "email d'invitation candidat"
+        );
+    }
+
+    private void sendHtmlEmail(String toEmail, String subject, String htmlBody, String emailLabel) {
+        validateEmailRequest(toEmail, subject);
+
         try {
             MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            MimeMessageHelper helper = new MimeMessageHelper(
+                    message,
+                    MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED,
+                    StandardCharsets.UTF_8.name()
+            );
 
-            helper.setFrom(fromEmail);
-            helper.setTo(toEmail);
-            helper.setSubject("Reinitialisation de votre mot de passe - SmartRecruit");
-
-            String resetLink = frontendUrl + "/reset-password?token=" + resetToken;
-            helper.setText(buildPasswordResetTemplate(fullName, resetLink), true);
+            helper.setValidateAddresses(true);
+            helper.setFrom(fromEmail, "Smart Recruit");
+            helper.setTo(toEmail.trim());
+            helper.setSubject(subject);
+            helper.setText(htmlBody, true);
+            message.setSentDate(new Date());
 
             mailSender.send(message);
-            logger.info("Email de reinitialisation envoye a: {}", toEmail);
-        } catch (MessagingException e) {
-            logger.error("Erreur lors de l'envoi de l'email de reinitialisation a: {}", toEmail, e);
-            throw new RuntimeException("Echec de l'envoi de l'email de reinitialisation", e);
+            logger.info("{} envoye a {}", emailLabel, toEmail);
+        } catch (MailException | MessagingException | UnsupportedEncodingException ex) {
+            String failureMessage = resolveMailFailureMessage(ex, emailLabel);
+            logger.error("Echec de l'envoi de {} a {}: {}", emailLabel, toEmail, failureMessage, ex);
+            throw new RuntimeException(failureMessage, ex);
         }
+    }
+
+    private void validateEmailRequest(String toEmail, String subject) {
+        if (!hasText(fromEmail)) {
+            throw new RuntimeException("Configuration email manquante : spring.mail.username n'est pas defini.");
+        }
+
+        if (!hasText(toEmail)) {
+            throw new RuntimeException("Adresse email destinataire manquante.");
+        }
+
+        if (!hasText(subject)) {
+            throw new RuntimeException("Sujet de l'email manquant.");
+        }
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private String resolveMailFailureMessage(Throwable throwable, String emailLabel) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof AuthenticationFailedException) {
+                return "Echec de l'envoi de " + emailLabel + " : authentification Gmail invalide. Verifiez spring.mail.username et le mot de passe d'application Gmail.";
+            }
+
+            if (current instanceof ConnectException || current instanceof SocketTimeoutException) {
+                return "Echec de l'envoi de " + emailLabel + " : le serveur SMTP Gmail est inaccessible depuis cette machine. Verifiez l'acces reseau vers smtp.gmail.com sur les ports 587 ou 465.";
+            }
+
+            String message = current.getMessage();
+            if (message != null) {
+                String normalized = message.toLowerCase();
+                if (normalized.contains("could not connect")
+                        || normalized.contains("connection timed out")
+                        || normalized.contains("connect timed out")
+                        || normalized.contains("connection refused")) {
+                    return "Echec de l'envoi de " + emailLabel + " : le serveur SMTP Gmail est inaccessible depuis cette machine. Verifiez l'acces reseau vers smtp.gmail.com sur les ports 587 ou 465.";
+                }
+
+                if (normalized.contains("authentication failed")
+                        || normalized.contains("535-5.7.8")
+                        || normalized.contains("535 5.7.8")
+                        || normalized.contains("534-5.7.9")
+                        || normalized.contains("username and password not accepted")) {
+                    return "Echec de l'envoi de " + emailLabel + " : authentification Gmail invalide. Verifiez spring.mail.username et le mot de passe d'application Gmail.";
+                }
+            }
+
+            current = current.getCause();
+        }
+
+        return "Echec de l'envoi de " + emailLabel;
     }
 
     private String buildActivationEmailTemplate(String fullName, String activationLink) {
@@ -242,6 +331,81 @@ public class EmailServiceImpl implements EmailService {
                 """
                 <p>Merci de votre confiance et bienvenue sur SmartRecruit.</p>
                 """
+        );
+    }
+
+    private String buildAiRejectionTemplate(String emailBody) {
+        String sanitizedBody = hasText(emailBody)
+                ? emailBody.trim().replace("\r\n", "\n").replace("\n", "<br>")
+                : "Bonjour,<br><br>Nous vous remercions pour votre interet pour Smart Recruit.<br><br>Cordialement,<br>Smart Recruit";
+
+        return String.format(
+                """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: Arial, sans-serif; line-height: 1.7; color: #24324a; background: #f4f7fb; margin: 0; padding: 24px; }
+                        .container { max-width: 640px; margin: 0 auto; background: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 14px 32px rgba(24, 39, 75, 0.12); }
+                        .header { padding: 28px 32px; background: linear-gradient(135deg, #255fd0 0%%, #27b0d7 100%%); color: #ffffff; }
+                        .content { padding: 32px; }
+                        .footer { color: #6f7c95; font-size: 13px; margin-top: 24px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>SmartRecruit</h1>
+                            <p>Suite a votre candidature</p>
+                        </div>
+                        <div class="content">
+                            <div>%s</div>
+                            <p class="footer">Cet email a ete envoye depuis Smart Recruit.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """,
+                sanitizedBody
+        );
+    }
+
+    private String buildInterviewEmailTemplate(String title, String emailBody) {
+        String sanitizedBody = hasText(emailBody)
+                ? emailBody.trim().replace("\r\n", "\n").replace("\n", "<br>")
+                : "Bonjour,<br><br>Smart Recruit vous contacte au sujet de votre entretien.<br><br>Cordialement,<br>Smart Recruit";
+
+        return String.format(
+                """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: Arial, sans-serif; line-height: 1.7; color: #24324a; background: #f4f7fb; margin: 0; padding: 24px; }
+                        .container { max-width: 640px; margin: 0 auto; background: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 14px 32px rgba(24, 39, 75, 0.12); }
+                        .header { padding: 28px 32px; background: linear-gradient(135deg, #214f97 0%%, #2a89d6 100%%); color: #ffffff; }
+                        .content { padding: 32px; }
+                        .footer { color: #6f7c95; font-size: 13px; margin-top: 24px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>SmartRecruit</h1>
+                            <p>%s</p>
+                        </div>
+                        <div class="content">
+                            <div>%s</div>
+                            <p class="footer">Cet email a ete envoye depuis Smart Recruit.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """,
+                title,
+                sanitizedBody
         );
     }
 

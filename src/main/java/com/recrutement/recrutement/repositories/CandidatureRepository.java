@@ -27,7 +27,12 @@ public interface CandidatureRepository extends JpaRepository<Candidature, Long> 
     @Query("select c.id from Candidature c where c.offre.recruiter.id = :recruiterId")
     List<Long> findIdsByRecruiterId(@Param("recruiterId") Long recruiterId);
 
+    @Query("select c.id from Candidature c where c.offre.id = :offerId")
+    List<Long> findIdsByOfferId(@Param("offerId") Long offerId);
+
     List<Candidature> findByOffre_Recruiter_IdAndOffre_IdOrderByScoreCandidatDescDateDepotDesc(Long recruiterId, Long offreId);
+
+    long countByOffre_Id(Long offreId);
 
     Optional<Candidature> findByIdAndOffre_Recruiter_Id(Long candidatureId, Long recruiterId);
 
@@ -40,4 +45,8 @@ public interface CandidatureRepository extends JpaRepository<Candidature, Long> 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from Candidature c where c.candidate.id = :candidateId")
     void deleteAllForCandidate(@Param("candidateId") Long candidateId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from Candidature c where c.offre.id = :offerId")
+    void deleteAllForOffer(@Param("offerId") Long offerId);
 }
