@@ -1,0 +1,43 @@
+﻿{
+    "fullName":  "Candidate Profile Test",
+    "profession":  "Developpeur",
+    "email":  "candidate.profile.test.1776007035@example.com",
+    "birthDate":  "1999-01-01",
+    "phone":  "12345678",
+    "jobTitle":  "Frontend Developer",
+    "address":  "Lagos",
+    "gender":  "homme",
+    "description":  "Profil de test",
+    "experiences":  [
+                        {
+                            "period":  "2024",
+                            "title":  "Dev",
+                            "description":  "Desc",
+                            "company":  "TechCorp",
+                            "location":  "Lagos"
+                        }
+                    ],
+    "education":  [
+                      {
+                          "institute":  "ISI",
+                          "title":  "Informatique",
+                          "year":  "2023",
+                          "degree":  "Licence"
+                      }
+                  ],
+    "skills":  [
+                   {
+                       "title":  "Angular",
+                       "percentage":  80,
+                       "competenceId":  null,
+                       "level":  "Avance",
+                       "yearsExperience":  "2 ans"
+                   }
+               ],
+    "socialLinks":  {
+                        "linkedin":  "https://linkedin.com/in/test",
+                        "instagram":  "",
+                        "facebook":  "",
+                        "github":  "https://github.com/test"
+                    }
+}
