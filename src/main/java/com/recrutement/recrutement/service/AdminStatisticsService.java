@@ -1,6 +1,7 @@
 package com.recrutement.recrutement.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.recrutement.recrutement.dto.AdminActivityResponse;
 import com.recrutement.recrutement.dto.AdminOverviewStatsResponse;
@@ -14,12 +15,14 @@ import com.recrutement.recrutement.dto.TopSkillResponse;
 import com.recrutement.recrutement.entities.AiTest;
 import com.recrutement.recrutement.entities.AiTestResult;
 import com.recrutement.recrutement.entities.Candidature;
+import com.recrutement.recrutement.entities.Competence;
 import com.recrutement.recrutement.entities.Offre;
 import com.recrutement.recrutement.entities.Subscription;
 import com.recrutement.recrutement.entities.User;
 import com.recrutement.recrutement.repositories.AiTestRepository;
 import com.recrutement.recrutement.repositories.AiTestResultRepository;
 import com.recrutement.recrutement.repositories.CandidatureRepository;
+import com.recrutement.recrutement.repositories.CompetenceRepository;
 import com.recrutement.recrutement.repositories.InterviewRepository;
 import com.recrutement.recrutement.repositories.OffreRepository;
 import com.recrutement.recrutement.repositories.SubscriptionRepository;
@@ -39,6 +42,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Comparator;
+import java.text.Normalizer;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.ObjectProvider;
 import org.slf4j.Logger;
@@ -58,6 +64,7 @@ public class AdminStatisticsService {
     private final AiTestRepository aiTestRepository;
     private final AiTestResultRepository aiTestResultRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final CompetenceRepository competenceRepository;
     private final ObjectMapper objectMapper;
     private final MatchingService matchingService;
     private final AssistantAgentService assistantAgentService;
@@ -73,6 +80,7 @@ public class AdminStatisticsService {
             AiTestRepository aiTestRepository,
             AiTestResultRepository aiTestResultRepository,
             SubscriptionRepository subscriptionRepository,
+            CompetenceRepository competenceRepository,
             ObjectMapper objectMapper,
             MatchingService matchingService,
             AssistantAgentService assistantAgentService,
@@ -87,6 +95,7 @@ public class AdminStatisticsService {
         this.aiTestRepository = aiTestRepository;
         this.aiTestResultRepository = aiTestResultRepository;
         this.subscriptionRepository = subscriptionRepository;
+        this.competenceRepository = competenceRepository;
         this.objectMapper = objectMapper;
         this.matchingService = matchingService;
         this.assistantAgentService = assistantAgentService;
@@ -169,25 +178,24 @@ public class AdminStatisticsService {
     }
 
     public List<TopSkillResponse> getTopSkills() {
-        Map<String, Long> counts = new LinkedHashMap<>();
+        Map<String, SkillCount> counts = new LinkedHashMap<>();
         for (Offre offer : offreRepository.findAll()) {
             if (offer == null) {
                 continue;
             }
-            for (OffreCompetenceRequest skill : readOfferSkills(offer.getCompetencesJson())) {
-                if (skill == null) {
-                    continue;
-                }
-                String name = safe(skill.getNom());
-                if (!name.isBlank()) {
-                    counts.merge(name, 1L, Long::sum);
+            Set<String> skillsInOffer = new LinkedHashSet<>(readOfferSkillNames(offer.getCompetencesJson()));
+            for (String name : skillsInOffer) {
+                String key = normalizeSkillKey(name);
+                if (!key.isBlank()) {
+                    counts.computeIfAbsent(key, ignored -> new SkillCount(formatSkillName(name)))
+                            .increment();
                 }
             }
         }
-        return counts.entrySet().stream()
-                .sorted((left, right) -> Long.compare(right.getValue(), left.getValue()))
+        return counts.values().stream()
+                .sorted(Comparator.comparingLong(SkillCount::count).reversed().thenComparing(SkillCount::name))
                 .limit(8)
-                .map(entry -> new TopSkillResponse(entry.getKey(), entry.getValue()))
+                .map(skill -> new TopSkillResponse(skill.name(), skill.count()))
                 .toList();
     }
 
@@ -281,11 +289,11 @@ public class AdminStatisticsService {
         ));
         rows.add(new ServiceHealthResponse(
                 "Python AI Agent",
-                pythonGroqAgentService != null && pythonGroqAgentService.isConfigured() ? "Connecté" : "Mode fallback",
+                pythonGroqAgentService != null && pythonGroqAgentService.isConfigured() ? "Groq API connectée" : "Configuration Groq requise",
                 pythonGroqAgentService != null && pythonGroqAgentService.isConfigured()
-                        ? "La configuration Groq/OpenAI est présente côté backend."
-                        : "Configuration distante absente ou partielle. Les réponses locales de secours restent disponibles.",
-                pythonGroqAgentService != null && pythonGroqAgentService.isConfigured() ? "success" : "warning"
+                        ? "Le backend utilise Groq API comme fournisseur IA principal."
+                        : "Ajoutez une clé GROQ_API_KEY ou assistant.groq.api.key pour activer Groq API.",
+                pythonGroqAgentService != null && pythonGroqAgentService.isConfigured() ? "success" : "danger"
         ));
         rows.add(new ServiceHealthResponse(
                 "Email Service",
@@ -497,6 +505,196 @@ public class AdminStatisticsService {
         }
     }
 
+    private List<String> readOfferSkillNames(String competencesJson) {
+        if (safe(competencesJson).isBlank()) {
+            return List.of();
+        }
+
+        List<String> names = new ArrayList<>();
+        try {
+            JsonNode root = objectMapper.readTree(competencesJson);
+            if (root.isArray()) {
+                root.forEach(node -> addSkillName(names, node));
+            } else {
+                addSkillName(names, root);
+            }
+        } catch (Exception ignored) {
+            for (OffreCompetenceRequest skill : readOfferSkills(competencesJson)) {
+                String name = safe(skill == null ? "" : skill.getNom());
+                if (!name.isBlank()) {
+                    names.add(name);
+                }
+            }
+            if (names.isEmpty()) {
+                for (String name : competencesJson.split("[,;\\n|]+")) {
+                    String cleaned = safe(name)
+                            .replace("[", "")
+                            .replace("]", "")
+                            .replace("\"", "");
+                    if (!cleaned.isBlank()) {
+                        addSkillNames(names, cleaned);
+                    }
+                }
+            }
+        }
+
+        return names;
+    }
+
+    private void addSkillName(List<String> names, JsonNode node) {
+        if (node == null || node.isNull()) {
+            return;
+        }
+
+        if (node.isArray()) {
+            node.forEach(child -> addSkillName(names, child));
+            return;
+        }
+
+        if (node.isTextual()) {
+            String value = safe(node.asText());
+            if (!value.isBlank()) {
+                addSkillNames(names, value);
+            }
+            return;
+        }
+
+        if (!node.isObject()) {
+            return;
+        }
+
+        String value = firstTextValue(node, "nom", "title", "name", "label", "libelle", "competenceName", "value");
+        if (!value.isBlank()) {
+            addSkillNames(names, value);
+            return;
+        }
+
+        Long competenceId = firstLongValue(node, "competenceId", "id", "skillId");
+        if (competenceId != null) {
+            competenceRepository.findById(competenceId)
+                    .map(Competence::getNom)
+                    .map(this::safe)
+                    .filter(name -> !name.isBlank())
+                    .ifPresent(name -> addSkillNames(names, name));
+            return;
+        }
+
+        for (String field : List.of("competences", "skills", "requiredSkills", "preferredSkills", "mandatorySkills", "optionalSkills")) {
+            JsonNode child = node.get(field);
+            if (child != null && !child.isNull()) {
+                addSkillName(names, child);
+            }
+        }
+    }
+
+    private String firstTextValue(JsonNode node, String... fields) {
+        for (String field : fields) {
+            JsonNode child = node.get(field);
+            if (child != null && !child.isNull()) {
+                String value = safe(child.asText());
+                if (!value.isBlank()) {
+                    return value;
+                }
+            }
+        }
+        return "";
+    }
+
+    private void addSkillNames(List<String> names, String rawValue) {
+        String value = safe(rawValue).replaceAll("\\s+", " ");
+        if (value.isBlank()) {
+            return;
+        }
+
+        if (value.matches(".*[,;\\n|/]+.*")) {
+            for (String part : value.split("[,;\\n|/]+")) {
+                addSkillNames(names, part);
+            }
+            return;
+        }
+
+        String normalized = normalizeSkillKey(value);
+        Map<String, String> exactSkills = Map.of(
+                "powerbi", "Power BI",
+                "python", "Python",
+                "sql", "SQL",
+                "docker", "Docker",
+                "springboot", "Spring Boot",
+                "angular", "Angular",
+                "postgresql", "PostgreSQL",
+                "postgres", "PostgreSQL"
+        );
+        if (exactSkills.containsKey(normalized)) {
+            names.add(exactSkills.get(normalized));
+            return;
+        }
+
+        String searchable = Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", " ")
+                .trim();
+        Set<String> detected = new LinkedHashSet<>();
+        if (searchable.matches(".*\\bpower\\s*bi\\b.*")) detected.add("Power BI");
+        if (searchable.matches(".*\\bpython\\b.*")) detected.add("Python");
+        if (searchable.matches(".*\\bsql\\b.*")) detected.add("SQL");
+        if (searchable.matches(".*\\bdocker\\b.*")) detected.add("Docker");
+        if (searchable.matches(".*\\bspring\\s*boot\\b.*")) detected.add("Spring Boot");
+        if (searchable.matches(".*\\bangular\\b.*")) detected.add("Angular");
+        if (searchable.matches(".*\\bpostgresql\\b.*") || searchable.matches(".*\\bpostgres\\b.*")) detected.add("PostgreSQL");
+
+        if (detected.isEmpty()) {
+            names.add(value);
+        } else {
+            names.addAll(detected);
+        }
+    }
+
+    private Long firstLongValue(JsonNode node, String... fields) {
+        for (String field : fields) {
+            JsonNode child = node.get(field);
+            if (child == null || child.isNull()) {
+                continue;
+            }
+
+            if (child.canConvertToLong()) {
+                return child.asLong();
+            }
+
+            try {
+                return Long.parseLong(safe(child.asText()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private String normalizeSkillKey(String value) {
+        String normalized = Normalizer.normalize(safe(value), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "");
+        return normalized.trim();
+    }
+
+    private String formatSkillName(String value) {
+        String cleaned = safe(value).replaceAll("\\s+", " ");
+        if (cleaned.isBlank()) {
+            return "Non defini";
+        }
+
+        return switch (normalizeSkillKey(cleaned)) {
+            case "powerbi" -> "Power BI";
+            case "sql" -> "SQL";
+            case "docker" -> "Docker";
+            case "springboot" -> "Spring Boot";
+            case "angular" -> "Angular";
+            case "postgresql", "postgres" -> "PostgreSQL";
+            case "python" -> "Python";
+            default -> cleaned;
+        };
+    }
+
     private double round2(double value) {
         return Math.round(value * 100d) / 100d;
     }
@@ -519,5 +717,26 @@ public class AdminStatisticsService {
     }
 
     private record ActivitySeed(Instant instant, String type, String title, String description) {
+    }
+
+    private static final class SkillCount {
+        private final String name;
+        private long count;
+
+        private SkillCount(String name) {
+            this.name = name;
+        }
+
+        private void increment() {
+            this.count++;
+        }
+
+        private String name() {
+            return name;
+        }
+
+        private long count() {
+            return count;
+        }
     }
 }

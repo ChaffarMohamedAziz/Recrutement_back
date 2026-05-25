@@ -313,6 +313,7 @@ public class AiTestService {
         if (aiTest == null) {
             throw new RuntimeException("Aucun Test IA disponible pour cette candidature.");
         }
+        aiTest = syncNotStartedApplicationTestWithOfferTemplate(aiTest);
         return toResponse(refreshExpiredIfNeeded(aiTest), null, null, null, false);
     }
 
@@ -387,6 +388,60 @@ public class AiTestService {
         savedTest.setDurationMinutes((int) Math.ceil(savedTest.getTotalDurationSeconds() / 60d));
         savedTest.setNumberOfQuestions(copiedQuestions.size());
         return aiTestRepository.save(savedTest);
+    }
+
+    private AiTest syncNotStartedApplicationTestWithOfferTemplate(AiTest aiTest) {
+        if (aiTest == null || aiTest.getApplication() == null || aiTest.getJobOffer() == null) {
+            return aiTest;
+        }
+        if (!TEST_STATUS_NOT_STARTED.equals(normalizeAiTestStatus(aiTest.getStatus()))) {
+            return aiTest;
+        }
+
+        AiTest template = aiTestRepository.findTopByJobOffer_IdAndApplicationIsNullOrderByCreatedAtDesc(aiTest.getJobOffer().getId())
+                .orElse(null);
+        String templateStatus = template == null ? "" : normalizeAiTestStatus(template.getStatus());
+        if (template == null || (!TEST_STATUS_VALIDATED.equals(templateStatus) && !TEST_STATUS_PUBLISHED.equals(templateStatus))) {
+            return aiTest;
+        }
+
+        List<AiQuestion> templateQuestions = aiQuestionRepository.findByAiTest_IdOrderByOrderIndexAscIdAsc(template.getId());
+        if (templateQuestions.isEmpty()) {
+            return aiTest;
+        }
+
+        Date now = new Date();
+        aiQuestionRepository.deleteAll(aiQuestionRepository.findByAiTest_IdOrderByIdAsc(aiTest.getId()));
+        List<AiQuestion> copiedQuestions = templateQuestions.stream()
+                .map(question -> AiQuestion.builder()
+                        .aiTest(aiTest)
+                        .questionText(question.getQuestionText())
+                        .questionType(question.getQuestionType())
+                        .optionsJson(question.getOptionsJson())
+                        .correctAnswer(question.getCorrectAnswer())
+                        .expectedKeywordsJson(question.getExpectedKeywordsJson())
+                        .points(question.getPoints())
+                        .orderIndex(question.getOrderIndex())
+                        .timeLimitSeconds(question.getTimeLimitSeconds())
+                        .acceptedByRecruiter(Boolean.TRUE)
+                        .createdAt(now)
+                        .updatedAt(now)
+                        .build())
+                .collect(Collectors.toList());
+        aiQuestionRepository.saveAll(copiedQuestions);
+
+        aiTest.setTitle(template.getTitle());
+        aiTest.setDescription(template.getDescription());
+        aiTest.setPassingScore(template.getPassingScore());
+        aiTest.setThreshold(template.getThreshold() == null ? template.getPassingScore() : template.getThreshold());
+        aiTest.setDifficulty(template.getDifficulty());
+        aiTest.setAllowPreviousQuestion(template.getAllowPreviousQuestion());
+        aiTest.setEvaluationSkillsJson(template.getEvaluationSkillsJson());
+        aiTest.setNumberOfQuestions(copiedQuestions.size());
+        aiTest.setTotalDurationSeconds(computeTotalDurationSeconds(copiedQuestions));
+        aiTest.setDurationMinutes(resolveDurationMinutes(aiTest.getTotalDurationSeconds(), template.getDurationMinutes()));
+        aiTest.setUpdatedAt(now);
+        return aiTestRepository.save(aiTest);
     }
 
     @Transactional
@@ -476,6 +531,7 @@ public class AiTestService {
         Candidate candidate = getCurrentCandidate(currentUser);
         AiTest aiTest = aiTestRepository.findByIdAndCandidate_Id(testId, candidate.getId())
                 .orElseThrow(() -> new RuntimeException("Test IA introuvable."));
+        aiTest = syncNotStartedApplicationTestWithOfferTemplate(aiTest);
         aiTest = refreshExpiredIfNeeded(aiTest);
         return toResponse(aiTest, null, null, null, false);
     }
@@ -1060,7 +1116,7 @@ public class AiTestService {
                 .collect(Collectors.toMap(
                         AiAnswerSubmissionRequest::getQuestionId,
                         item -> safe(item.getCandidateAnswer()),
-                        (_, replacement) -> replacement,
+                        (existing, replacement) -> replacement,
                         LinkedHashMap::new
                 ));
 
@@ -1533,15 +1589,15 @@ public class AiTestService {
         if (aiTest == null) {
             return DEFAULT_TEST_DURATION_MINUTES * 60;
         }
-        if (aiTest.getTotalDurationSeconds() != null && aiTest.getTotalDurationSeconds() > 0) {
-            return aiTest.getTotalDurationSeconds();
-        }
         List<AiQuestion> questions = aiQuestionRepository.findByAiTest_IdOrderByOrderIndexAscIdAsc(aiTest.getId());
         int computed = computeTotalDurationSeconds(questions);
         if (computed > 0) {
             aiTest.setTotalDurationSeconds(computed);
             aiTest.setDurationMinutes(resolveDurationMinutes(computed, aiTest.getDurationMinutes()));
             return computed;
+        }
+        if (aiTest.getTotalDurationSeconds() != null && aiTest.getTotalDurationSeconds() > 0) {
+            return aiTest.getTotalDurationSeconds();
         }
         return normalizeDurationMinutes(aiTest.getDurationMinutes()) * 60;
     }
@@ -1582,6 +1638,9 @@ public class AiTestService {
         AiQuestion currentQuestion = questions.get(currentIndex);
         List<AiAnswer> answers = aiAnswerRepository.findByAiTestResult_IdOrderByIdAsc(result.getId());
         AiTestResponse response = toResponse(aiTest, List.of(currentQuestion), answers, result, includeAnswerAudit);
+        int totalDurationSeconds = computeTotalDurationSeconds(questions);
+        response.setTotalDurationSeconds(totalDurationSeconds);
+        response.setDurationMinutes(resolveDurationMinutes(totalDurationSeconds, aiTest.getDurationMinutes()));
         response.setResultId(result.getId());
         response.setCurrentQuestionIndex(currentIndex);
         response.setTotalQuestions(questions.size());
@@ -1736,9 +1795,10 @@ public class AiTestService {
         response.setStatus(normalizeAiTestStatus(aiTest.getStatus()));
         response.setThreshold(aiTest.getThreshold());
         response.setPassingScore(aiTest.getPassingScore() == null ? aiTest.getThreshold() : aiTest.getPassingScore());
-        int totalDurationSeconds = aiTest.getTotalDurationSeconds() == null
-                ? computeTotalDurationSeconds(questions)
-                : aiTest.getTotalDurationSeconds();
+        int computedDurationSeconds = computeTotalDurationSeconds(questions);
+        int totalDurationSeconds = computedDurationSeconds > 0
+                ? computedDurationSeconds
+                : safeInteger(aiTest.getTotalDurationSeconds());
         response.setDurationMinutes(resolveDurationMinutes(totalDurationSeconds, aiTest.getDurationMinutes()));
         response.setTotalDurationSeconds(totalDurationSeconds);
         response.setNumberOfQuestions(aiTest.getNumberOfQuestions() == null ? questions.size() : aiTest.getNumberOfQuestions());

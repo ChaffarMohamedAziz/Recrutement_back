@@ -11,6 +11,7 @@ public class RegisterResponse {
     private String message;
     private boolean success;
     private boolean statutCompte;
+    private long publishedOffersCount;
 
     public RegisterResponse() {
     }
@@ -40,6 +41,7 @@ public class RegisterResponse {
         private String message;
         private boolean success;
         private boolean statutCompte;
+        private long publishedOffersCount;
 
         public RegisterResponseBuilder id(Long id) {
             this.id = id;
@@ -81,8 +83,15 @@ public class RegisterResponse {
             return this;
         }
 
+        public RegisterResponseBuilder publishedOffersCount(long publishedOffersCount) {
+            this.publishedOffersCount = publishedOffersCount;
+            return this;
+        }
+
         public RegisterResponse build() {
-            return new RegisterResponse(id, email, nom, role, approvalStatus, message, success, statutCompte);
+            RegisterResponse response = new RegisterResponse(id, email, nom, role, approvalStatus, message, success, statutCompte);
+            response.setPublishedOffersCount(publishedOffersCount);
+            return response;
         }
     }
 
@@ -149,5 +158,13 @@ public class RegisterResponse {
 
     public void setStatutCompte(boolean statutCompte) {
         this.statutCompte = statutCompte;
+    }
+
+    public long getPublishedOffersCount() {
+        return publishedOffersCount;
+    }
+
+    public void setPublishedOffersCount(long publishedOffersCount) {
+        this.publishedOffersCount = publishedOffersCount;
     }
 }

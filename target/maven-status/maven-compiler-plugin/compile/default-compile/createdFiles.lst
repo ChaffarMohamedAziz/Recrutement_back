@@ -62,6 +62,7 @@ com\recrutement\recrutement\service\MessagingService.class
 com\recrutement\recrutement\dto\UpdateApplicationStatusRequest.class
 com\recrutement\recrutement\repositories\UserRepository.class
 com\recrutement\recrutement\controller\CandidateAiTestController.class
+com\recrutement\recrutement\service\AdminStatisticsService$SkillCount.class
 com\recrutement\recrutement\service\AiTestService$GeneratedQuestionPayload.class
 com\recrutement\recrutement\entities\InterviewType.class
 com\recrutement\recrutement\dto\RescheduleInterviewRequest.class

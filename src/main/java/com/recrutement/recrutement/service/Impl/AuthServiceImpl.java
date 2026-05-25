@@ -475,6 +475,7 @@ public class AuthServiceImpl implements AuthService {
                         .role(user.getRole())
                         .approvalStatus(resolveApprovalStatus(user).name())
                         .statutCompte(Boolean.TRUE.equals(user.getStatutCompte()))
+                        .publishedOffersCount(offreRepository.countByRecruiter_IdAndStatutIgnoreCase(user.getId(), "PUBLIEE"))
                         .success(true)
                         .build()
                 )

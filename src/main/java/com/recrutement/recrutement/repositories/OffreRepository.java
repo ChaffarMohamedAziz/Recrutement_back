@@ -13,5 +13,7 @@ public interface OffreRepository extends JpaRepository<Offre, Long> {
 
     List<Offre> findByRecruiter_IdOrderByDateDesc(Long recruiterId);
 
+    long countByRecruiter_IdAndStatutIgnoreCase(Long recruiterId, String statut);
+
     void deleteByRecruiter_Id(Long recruiterId);
 }

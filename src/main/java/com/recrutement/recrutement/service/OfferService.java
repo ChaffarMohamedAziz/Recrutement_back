@@ -403,7 +403,7 @@ public class OfferService {
                 && (hasValidatedTemplate || applicationAiTest != null);
         boolean canPassAiTest = Boolean.TRUE.equals(response.getAlreadyApplied())
                 && hasValidatedTemplate
-                && (applicationAiTest != null || effectiveTest != null)
+                && effectiveTest != null
                 && !"SUBMITTED".equals(aiTestResultStatus)
                 && !"EXPIRED".equals(aiTestResultStatus)
                 && !"CHEATING_SUSPECTED".equals(aiTestResultStatus)
@@ -411,7 +411,7 @@ public class OfferService {
 
         response.setHasAiTest(hasValidatedTemplate || applicationAiTest != null);
         response.setAiTestAvailable(aiTestAvailable);
-        response.setAiTestId(applicationAiTest == null ? null : applicationAiTest.getId());
+        response.setAiTestId(effectiveTest == null ? null : effectiveTest.getId());
         response.setAiTestStatus(aiTestStatus);
         response.setAiTestResultStatus(aiTestResultStatus);
         response.setCanPassAiTest(canPassAiTest);
