@@ -226,8 +226,11 @@ public class AuthServiceImpl implements AuthService {
             if (approvalStatus == AccountApprovalStatus.REFUSED) {
                 throw new RuntimeException("Votre demande de compte recruteur a ete refusee par l'administrateur.");
             }
-            if (approvalStatus != AccountApprovalStatus.APPROVED || user.getStatutCompte() == null || !user.getStatutCompte()) {
+            if (approvalStatus != AccountApprovalStatus.APPROVED) {
                 throw new RuntimeException("Votre compte est en attente d'approbation par l'administrateur.");
+            }
+            if (!Boolean.TRUE.equals(user.getStatutCompte())) {
+                throw new RuntimeException("Votre compte recruteur est suspendu. Contactez l'administrateur.");
             }
             if (!Boolean.TRUE.equals(user.getEmailverified())) {
                 throw new RuntimeException("Veuillez verifier votre email avant de vous connecter.");
@@ -269,8 +272,11 @@ public class AuthServiceImpl implements AuthService {
                 if (approvalStatus == AccountApprovalStatus.REFUSED) {
                     return buildSocialErrorResponse("Votre demande de compte recruteur a ete refusee par l'administrateur.");
                 }
-                if (approvalStatus != AccountApprovalStatus.APPROVED || existingUser.getStatutCompte() == null || !existingUser.getStatutCompte()) {
+                if (approvalStatus != AccountApprovalStatus.APPROVED) {
                     return buildSocialErrorResponse("Votre compte est en attente d'approbation par l'administrateur.");
+                }
+                if (!Boolean.TRUE.equals(existingUser.getStatutCompte())) {
+                    return buildSocialErrorResponse("Votre compte recruteur est suspendu. Contactez l'administrateur.");
                 }
             } else if (existingUser.getStatutCompte() == null || !existingUser.getStatutCompte()) {
                 return buildSocialErrorResponse("Votre compte n'est pas actif.");
@@ -473,8 +479,12 @@ public class AuthServiceImpl implements AuthService {
                         .nom(user.getNom())
                         .email(user.getEmail())
                         .role(user.getRole())
-                        .approvalStatus(resolveApprovalStatus(user).name())
+                        .approvalStatus(resolveDisplayApprovalStatus(user))
                         .statutCompte(Boolean.TRUE.equals(user.getStatutCompte()))
+                        .entrepriseName(getRecruiterCompanyName(user))
+                        .entreprise(getRecruiterCompanyName(user))
+                        .secteurActivite(getRecruiterCompanySector(user))
+                        .dateInscription(formatRegistrationDate(user.getCreatedAt()))
                         .publishedOffersCount(offreRepository.countByRecruiter_IdAndStatutIgnoreCase(user.getId(), "PUBLIEE"))
                         .success(true)
                         .build()
@@ -502,6 +512,31 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @Transactional
+    public MessageResponse suspendRecruiterAccount(Long recruiterId) {
+        User user = userRepository.findById(recruiterId)
+                .orElseThrow(() -> new RuntimeException("Recruteur non trouve"));
+
+        if (user.getRole() != Role.RECRUITER) {
+            return new MessageResponse(false, "Cet utilisateur n'est pas un recruteur.");
+        }
+
+        user.setStatutCompte(false);
+        if (user.getApprovalStatus() == null) {
+            user.setApprovalStatus(AccountApprovalStatus.APPROVED);
+        }
+        userRepository.save(user);
+
+        try {
+            notificationService.notifyUser(user, "Votre compte recruteur a ete suspendu par l'administrateur.");
+        } catch (RuntimeException ex) {
+            logger.warn("Echec de creation de la notification de suspension pour {}", user.getEmail(), ex);
+        }
+
+        return new MessageResponse(true, "Compte recruteur desactive. Les offres, candidatures et historiques sont conserves.");
+    }
+
+    @Override
     public List<UserSummaryResponse> getUsers(String query) {
         Map<Long, User> allUsers = new LinkedHashMap<>();
         userRepository.findAll().forEach(user -> allUsers.put(user.getId(), user));
@@ -513,7 +548,14 @@ public class AuthServiceImpl implements AuthService {
                 .filter(user -> user.getRole() != Role.ADMIN)
                 .filter(user -> matchesUserQuery(user, trimmedQuery))
                 .sorted(Comparator.comparing(User::getId).reversed())
-                .map(user -> new UserSummaryResponse(user.getId(), user.getNom(), user.getEmail(), user.getRole()))
+                .map(user -> new UserSummaryResponse(
+                        user.getId(),
+                        user.getNom(),
+                        user.getEmail(),
+                        user.getRole(),
+                        Boolean.TRUE.equals(user.getStatutCompte()),
+                        resolveDisplayApprovalStatus(user)
+                ))
                 .collect(Collectors.toList());
     }
 
@@ -607,6 +649,60 @@ public class AuthServiceImpl implements AuthService {
         notificationService.clearNotificationsForUser(user);
         userRepository.deleteById(userId);
         return new MessageResponse(true, "Utilisateur supprime avec succes.");
+    }
+
+    @Override
+    @Transactional
+    public MessageResponse suspendUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable."));
+
+        if (user.getRole() == Role.ADMIN) {
+            throw new RuntimeException("La desactivation d'un administrateur n'est pas autorisee.");
+        }
+
+        user.setStatutCompte(false);
+        if (user.getApprovalStatus() == null) {
+            user.setApprovalStatus(AccountApprovalStatus.APPROVED);
+        }
+        userRepository.save(user);
+
+        try {
+            notificationService.notifyUser(user, "Votre compte a ete desactive par l'administrateur.");
+        } catch (RuntimeException ex) {
+            logger.warn("Echec de creation de la notification de desactivation pour {}", user.getEmail(), ex);
+        }
+
+        String roleLabel = user.getRole() == Role.RECRUITER ? "recruteur" : "utilisateur";
+        return new MessageResponse(true, "Compte " + roleLabel + " desactive. Les donnees et l'historique sont conserves.");
+    }
+
+    @Override
+    @Transactional
+    public MessageResponse activateUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable."));
+
+        if (user.getRole() == Role.ADMIN) {
+            throw new RuntimeException("L'activation d'un administrateur depuis cette page n'est pas autorisee.");
+        }
+
+        user.setStatutCompte(true);
+        if (user.getApprovalStatus() == null || user.getApprovalStatus() == AccountApprovalStatus.REFUSED) {
+            user.setApprovalStatus(AccountApprovalStatus.APPROVED);
+        }
+        user.setEmailVerified(true);
+        user.setActivationToken(null);
+        userRepository.save(user);
+
+        try {
+            notificationService.notifyUser(user, "Votre compte a ete reactive par l'administrateur.");
+        } catch (RuntimeException ex) {
+            logger.warn("Echec de creation de la notification de reactivation pour {}", user.getEmail(), ex);
+        }
+
+        String roleLabel = user.getRole() == Role.RECRUITER ? "recruteur" : "utilisateur";
+        return new MessageResponse(true, "Compte " + roleLabel + " active avec succes.");
     }
 
     @Override
@@ -837,6 +933,36 @@ public class AuthServiceImpl implements AuthService {
         }
 
         return AccountApprovalStatus.PENDING;
+    }
+
+    private String resolveDisplayApprovalStatus(User user) {
+        AccountApprovalStatus status = resolveApprovalStatus(user);
+        if (status == AccountApprovalStatus.APPROVED && !Boolean.TRUE.equals(user.getStatutCompte())) {
+            return "SUSPENDED";
+        }
+        return status.name();
+    }
+
+    private String getRecruiterCompanyName(User user) {
+        if (user instanceof Recruiter recruiter
+                && recruiter.getEntreprise() != null
+                && hasText(recruiter.getEntreprise().getNomEntreprise())) {
+            return recruiter.getEntreprise().getNomEntreprise();
+        }
+        return "Non disponible";
+    }
+
+    private String getRecruiterCompanySector(User user) {
+        if (user instanceof Recruiter recruiter
+                && recruiter.getEntreprise() != null
+                && hasText(recruiter.getEntreprise().getSecteur())) {
+            return recruiter.getEntreprise().getSecteur();
+        }
+        return "Non disponible";
+    }
+
+    private String formatRegistrationDate(LocalDateTime createdAt) {
+        return createdAt == null ? "Compte existant" : createdAt.toString();
     }
 
     private int getApprovalStatusOrder(AccountApprovalStatus status) {

@@ -7,6 +7,8 @@ public class UserSummaryResponse {
     private String nom;
     private String email;
     private Role role;
+    private Boolean statutCompte;
+    private String approvalStatus;
 
     public UserSummaryResponse() {
     }
@@ -16,6 +18,15 @@ public class UserSummaryResponse {
         this.nom = nom;
         this.email = email;
         this.role = role;
+    }
+
+    public UserSummaryResponse(Long id, String nom, String email, Role role, Boolean statutCompte, String approvalStatus) {
+        this.id = id;
+        this.nom = nom;
+        this.email = email;
+        this.role = role;
+        this.statutCompte = statutCompte;
+        this.approvalStatus = approvalStatus;
     }
 
     public Long getId() {
@@ -48,5 +59,21 @@ public class UserSummaryResponse {
 
     public void setRole(Role role) {
         this.role = role;
+    }
+
+    public Boolean getStatutCompte() {
+        return statutCompte;
+    }
+
+    public void setStatutCompte(Boolean statutCompte) {
+        this.statutCompte = statutCompte;
+    }
+
+    public String getApprovalStatus() {
+        return approvalStatus;
+    }
+
+    public void setApprovalStatus(String approvalStatus) {
+        this.approvalStatus = approvalStatus;
     }
 }

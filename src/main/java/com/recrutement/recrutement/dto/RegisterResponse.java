@@ -12,6 +12,10 @@ public class RegisterResponse {
     private boolean success;
     private boolean statutCompte;
     private long publishedOffersCount;
+    private String entrepriseName;
+    private String entreprise;
+    private String secteurActivite;
+    private String dateInscription;
 
     public RegisterResponse() {
     }
@@ -42,6 +46,10 @@ public class RegisterResponse {
         private boolean success;
         private boolean statutCompte;
         private long publishedOffersCount;
+        private String entrepriseName;
+        private String entreprise;
+        private String secteurActivite;
+        private String dateInscription;
 
         public RegisterResponseBuilder id(Long id) {
             this.id = id;
@@ -88,9 +96,33 @@ public class RegisterResponse {
             return this;
         }
 
+        public RegisterResponseBuilder entrepriseName(String entrepriseName) {
+            this.entrepriseName = entrepriseName;
+            return this;
+        }
+
+        public RegisterResponseBuilder entreprise(String entreprise) {
+            this.entreprise = entreprise;
+            return this;
+        }
+
+        public RegisterResponseBuilder secteurActivite(String secteurActivite) {
+            this.secteurActivite = secteurActivite;
+            return this;
+        }
+
+        public RegisterResponseBuilder dateInscription(String dateInscription) {
+            this.dateInscription = dateInscription;
+            return this;
+        }
+
         public RegisterResponse build() {
             RegisterResponse response = new RegisterResponse(id, email, nom, role, approvalStatus, message, success, statutCompte);
             response.setPublishedOffersCount(publishedOffersCount);
+            response.setEntrepriseName(entrepriseName);
+            response.setEntreprise(entreprise);
+            response.setSecteurActivite(secteurActivite);
+            response.setDateInscription(dateInscription);
             return response;
         }
     }
@@ -166,5 +198,37 @@ public class RegisterResponse {
 
     public void setPublishedOffersCount(long publishedOffersCount) {
         this.publishedOffersCount = publishedOffersCount;
+    }
+
+    public String getEntrepriseName() {
+        return entrepriseName;
+    }
+
+    public void setEntrepriseName(String entrepriseName) {
+        this.entrepriseName = entrepriseName;
+    }
+
+    public String getEntreprise() {
+        return entreprise;
+    }
+
+    public void setEntreprise(String entreprise) {
+        this.entreprise = entreprise;
+    }
+
+    public String getSecteurActivite() {
+        return secteurActivite;
+    }
+
+    public void setSecteurActivite(String secteurActivite) {
+        this.secteurActivite = secteurActivite;
+    }
+
+    public String getDateInscription() {
+        return dateInscription;
+    }
+
+    public void setDateInscription(String dateInscription) {
+        this.dateInscription = dateInscription;
     }
 }

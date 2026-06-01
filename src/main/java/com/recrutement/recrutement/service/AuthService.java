@@ -25,11 +25,17 @@ public interface AuthService {
 
     void deleteRecruiterAccount(Long recruiterId);
 
+    MessageResponse suspendRecruiterAccount(Long recruiterId);
+
     List<UserSummaryResponse> getUsers(String query);
 
     UserProfileResponse getUserById(Long userId);
 
     MessageResponse deleteUser(Long userId);
+
+    MessageResponse suspendUser(Long userId);
+
+    MessageResponse activateUser(Long userId);
 
     MessageResponse forgotPassword(ForgotPasswordRequest request);
 

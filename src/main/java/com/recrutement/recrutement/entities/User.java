@@ -17,6 +17,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Inheritance;
 import jakarta.persistence.InheritanceType;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 @Entity
@@ -49,6 +50,7 @@ public class User implements UserDetails {
     @Column(unique = true)
     private String resetPasswordToken;
     private LocalDateTime resetPasswordTokenExpiresAt;
+    private LocalDateTime createdAt;
 
     public User() {
     }
@@ -150,6 +152,21 @@ public class User implements UserDetails {
 
     public void setResetPasswordTokenExpiresAt(LocalDateTime resetPasswordTokenExpiresAt) {
         this.resetPasswordTokenExpiresAt = resetPasswordTokenExpiresAt;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
     }
 
 
