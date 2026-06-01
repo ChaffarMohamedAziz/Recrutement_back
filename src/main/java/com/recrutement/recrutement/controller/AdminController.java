@@ -42,8 +42,12 @@ public class AdminController {
 
     @DeleteMapping("/recruiters/{id}")
     public ResponseEntity<MessageResponse> deleteRecruiter(@PathVariable Long id) {
-        authService.deleteRecruiterAccount(id);
-        return ResponseEntity.ok(new MessageResponse(true, "Recruteur supprime avec succes."));
+        return ResponseEntity.ok(authService.suspendRecruiterAccount(id));
+    }
+
+    @PutMapping("/recruiters/{id}/suspend")
+    public ResponseEntity<MessageResponse> suspendRecruiter(@PathVariable Long id) {
+        return ResponseEntity.ok(authService.suspendRecruiterAccount(id));
     }
 
     @GetMapping("/users")
@@ -58,6 +62,21 @@ public class AdminController {
 
     @DeleteMapping("/users/{id}")
     public ResponseEntity<MessageResponse> deleteUser(@PathVariable Long id) {
-        return ResponseEntity.ok(authService.deleteUser(id));
+        return ResponseEntity.ok(authService.suspendUser(id));
+    }
+
+    @PutMapping("/users/{id}/suspend")
+    public ResponseEntity<MessageResponse> suspendUser(@PathVariable Long id) {
+        return ResponseEntity.ok(authService.suspendUser(id));
+    }
+
+    @PutMapping("/users/{id}/activate")
+    public ResponseEntity<MessageResponse> activateUser(@PathVariable Long id) {
+        return ResponseEntity.ok(authService.activateUser(id));
+    }
+
+    @PostMapping("/users/{id}/activate")
+    public ResponseEntity<MessageResponse> activateUserPost(@PathVariable Long id) {
+        return ResponseEntity.ok(authService.activateUser(id));
     }
 }
