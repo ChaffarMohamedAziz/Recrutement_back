@@ -19,6 +19,7 @@ com\recrutement\recrutement\service\MatchingService.class
 com\recrutement\recrutement\entities\Entreprise$EntrepriseBuilder.class
 com\recrutement\recrutement\entities\AccountApprovalStatus.class
 com\recrutement\recrutement\entities\AiAnswer.class
+com\recrutement\recrutement\dto\ContactMessageRequest.class
 com\recrutement\recrutement\dto\RecruiterCompanyProfileResponse.class
 com\recrutement\recrutement\entities\CandidateInvitation$CandidateInvitationBuilder.class
 com\recrutement\recrutement\service\SubscriptionService$1.class
@@ -26,6 +27,7 @@ com\recrutement\recrutement\dto\AiAnswerSubmissionRequest.class
 com\recrutement\recrutement\service\NotificationService.class
 com\recrutement\recrutement\dto\AdminOverviewStatsResponse.class
 com\recrutement\recrutement\service\CompetenceService.class
+com\recrutement\recrutement\service\ContactMessageService.class
 com\recrutement\recrutement\controller\CandidateApplicationController.class
 com\recrutement\recrutement\entities\InterviewStatus.class
 com\recrutement\recrutement\dto\CandidateProfileRequest$CandidateExperienceRequest.class
@@ -61,6 +63,7 @@ com\recrutement\recrutement\controller\AdminStatisticsController.class
 com\recrutement\recrutement\service\MessagingService.class
 com\recrutement\recrutement\dto\UpdateApplicationStatusRequest.class
 com\recrutement\recrutement\repositories\UserRepository.class
+com\recrutement\recrutement\dto\ContactMessageResponse.class
 com\recrutement\recrutement\controller\CandidateAiTestController.class
 com\recrutement\recrutement\service\AdminStatisticsService$SkillCount.class
 com\recrutement\recrutement\service\AiTestService$GeneratedQuestionPayload.class
@@ -84,6 +87,7 @@ com\recrutement\recrutement\service\GroqCvAutofillService.class
 com\recrutement\recrutement\dto\OffreRequest.class
 com\recrutement\recrutement\entities\AiTestResult.class
 com\recrutement\recrutement\dto\ServiceHealthResponse.class
+com\recrutement\recrutement\entities\ContactMessage.class
 com\recrutement\recrutement\dto\CreateAiTestRequest.class
 com\recrutement\recrutement\entities\User.class
 com\recrutement\recrutement\dto\SubmitAiTestRequest.class
@@ -92,6 +96,7 @@ com\recrutement\recrutement\repositories\CandidateRepository.class
 com\recrutement\recrutement\service\SubscriptionService.class
 com\recrutement\recrutement\dto\RejectAfterAiTestRequest.class
 com\recrutement\recrutement\controller\OfferController.class
+com\recrutement\recrutement\repositories\ContactMessageRepository.class
 com\recrutement\recrutement\entities\AiTest.class
 com\recrutement\recrutement\repositories\RecruiterRepository.class
 com\recrutement\recrutement\dto\AssistantOfferDraftResponse.class
@@ -106,6 +111,7 @@ com\recrutement\recrutement\config\OffreSchemaUpdater.class
 com\recrutement\recrutement\repositories\CandidatureRepository.class
 com\recrutement\recrutement\dto\OffreCompetenceRequest.class
 com\recrutement\recrutement\service\AiTestService.class
+com\recrutement\recrutement\controller\ContactController.class
 com\recrutement\recrutement\controller\RecruiterCandidateController.class
 com\recrutement\recrutement\dto\TopOfferActivityResponse.class
 com\recrutement\recrutement\service\EmailService.class

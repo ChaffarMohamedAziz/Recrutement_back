@@ -160,10 +160,10 @@ public class OfferService {
         }
 
         Recruiter recruiter = getCurrentRecruiter(currentUser);
-        subscriptionService.assertRecruiterCanPublishOffer(recruiter, true);
 
         Offre offre = new Offre();
         applyRequest(offre, request);
+        offre.setStatut("EN_ATTENTE_TEST_IA");
         offre.setRecruiter(recruiter);
         offre.setDate(java.sql.Date.valueOf(LocalDate.now()));
 
@@ -177,7 +177,15 @@ public class OfferService {
 
         Offre offre = getRecruiterOwnedOffer(currentUser, offerId, "modifier");
 
+        String currentStatus = normalizeStatus(offre.getStatut());
         applyRequest(offre, request);
+        String requestedStatus = normalizeStatus(request.getStatut());
+        if ("PUBLIEE".equals(requestedStatus)) {
+            assertOfferCanBePublished(currentUser, offre);
+            offre.setStatut("PUBLIEE");
+        } else if ("PUBLIEE".equals(currentStatus)) {
+            offre.setStatut("PUBLIEE");
+        }
         return toResponse(offreRepository.save(offre), null);
     }
 
@@ -263,12 +271,28 @@ public class OfferService {
     @Transactional
     public OffreResponse unarchiveOffer(User currentUser, Long offerId) {
         Offre offre = getRecruiterOwnedOffer(currentUser, offerId, "desarchiver");
-        subscriptionService.assertRecruiterCanPublishOffer(getCurrentRecruiter(currentUser), true);
         String currentStatus = normalizeStatus(offre.getStatut());
         if ("PUBLIEE".equals(currentStatus)) {
             return toResponse(offre, null);
         }
 
+        assertOfferCanBePublished(currentUser, offre);
+        offre.setStatut("PUBLIEE");
+        if (offre.getDate() == null) {
+            offre.setDate(java.sql.Date.valueOf(LocalDate.now()));
+        }
+        return toResponse(offreRepository.save(offre), null);
+    }
+
+    @Transactional
+    public OffreResponse publishOffer(User currentUser, Long offerId) {
+        Offre offre = getRecruiterOwnedOffer(currentUser, offerId, "publier");
+        String currentStatus = normalizeStatus(offre.getStatut());
+        if ("PUBLIEE".equals(currentStatus)) {
+            return toResponse(offre, null);
+        }
+
+        assertOfferCanBePublished(currentUser, offre);
         offre.setStatut("PUBLIEE");
         if (offre.getDate() == null) {
             offre.setDate(java.sql.Date.valueOf(LocalDate.now()));
@@ -331,7 +355,7 @@ public class OfferService {
         offre.setDevise(defaultValue(request.getDevise(), "TND"));
         offre.setNombrePostes(request.getNombrePostes() == null ? 1 : request.getNombrePostes());
         offre.setExperienceRequise(defaultValue(request.getExperienceRequise(), "Non precisee"));
-        offre.setStatut(normalizeStatus(defaultValue(request.getStatut(), "PUBLIEE")));
+        offre.setStatut(normalizeStatus(defaultValue(request.getStatut(), "EN_ATTENTE_TEST_IA")));
         offre.setDateExpiration(parseDate(request.getDateExpiration()));
         offre.setCompetencesJson(writeCompetencesJson(request.getCompetences()));
     }
@@ -375,10 +399,13 @@ public class OfferService {
             response.setAlreadyApplied(Boolean.FALSE);
             response.setApplicationId(null);
             response.setApplicationStatus(null);
-            response.setHasAiTest(Boolean.FALSE);
+            AiTest offerTemplate = aiTestRepository.findTopByJobOffer_IdAndApplicationIsNullOrderByCreatedAtDesc(offre.getId()).orElse(null);
+            String templateStatus = offerTemplate == null ? null : AiTestService.normalizeAiTestStatus(offerTemplate.getStatus());
+            boolean hasValidatedTemplate = "VALIDATED".equals(templateStatus) || "PUBLISHED".equals(templateStatus);
+            response.setHasAiTest(hasValidatedTemplate);
             response.setAiTestAvailable(Boolean.FALSE);
-            response.setAiTestId(null);
-            response.setAiTestStatus(null);
+            response.setAiTestId(offerTemplate == null ? null : offerTemplate.getId());
+            response.setAiTestStatus(templateStatus);
             response.setAiTestResultStatus(null);
             response.setCanPassAiTest(Boolean.FALSE);
         }
@@ -517,6 +544,24 @@ public class OfferService {
         LocalDate expiration = toLocalDate(offre.getDateExpiration());
 
         return !expiration.isBefore(LocalDate.now());
+    }
+
+    private void assertOfferCanBePublished(User currentUser, Offre offre) {
+        subscriptionService.assertRecruiterCanPublishOffer(getCurrentRecruiter(currentUser), true);
+        if (!hasValidatedAiTestForOffer(offre == null ? null : offre.getId())) {
+            throw new RuntimeException("Test IA requis avant publication. Vous devez préparer et valider le Test IA avant de publier cette offre.");
+        }
+    }
+
+    private boolean hasValidatedAiTestForOffer(Long offerId) {
+        if (offerId == null) {
+            return false;
+        }
+
+        return aiTestRepository.findTopByJobOffer_IdAndApplicationIsNullOrderByCreatedAtDesc(offerId)
+                .map(test -> AiTestService.normalizeAiTestStatus(test.getStatus()))
+                .map(status -> "VALIDATED".equals(status) || "PUBLISHED".equals(status))
+                .orElse(false);
     }
 
     private String writeCompetencesJson(List<OffreCompetenceRequest> competences) {
@@ -743,7 +788,9 @@ public class OfferService {
         String normalized = normalize(value).toUpperCase(Locale.ROOT);
         return switch (normalized) {
             case "PUBLISHED" -> "PUBLIEE";
+            case "PUBLIÉE" -> "PUBLIEE";
             case "DRAFT" -> "BROUILLON";
+            case "PENDING_AI_TEST", "EN ATTENTE TEST IA", "EN_ATTENTE_TEST" -> "EN_ATTENTE_TEST_IA";
             case "ARCHIVED" -> "ARCHIVEE";
             default -> normalized;
         };

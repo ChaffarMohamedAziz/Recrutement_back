@@ -95,6 +95,15 @@ public class RecruiterOfferController {
         return ResponseEntity.ok(offerService.unarchiveOffer(currentUser, id));
     }
 
+    @PatchMapping("/{id}/publish")
+    public ResponseEntity<OffreResponse> publishOffer(
+            Authentication authentication,
+            @PathVariable Long id
+    ) {
+        User currentUser = (User) authentication.getPrincipal();
+        return ResponseEntity.ok(offerService.publishOffer(currentUser, id));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<MessageResponse> deleteOffer(
             Authentication authentication,

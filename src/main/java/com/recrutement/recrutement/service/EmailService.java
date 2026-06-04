@@ -12,5 +12,6 @@ public interface EmailService {
     void sendInterviewReminderEmail(String toEmail, String subject, String emailBody);
     void sendInterviewAbsenceRejectedEmail(String toEmail, String subject, String emailBody);
     void sendCandidateInvitationEmail(String toEmail, String subject, String emailBody);
+    void sendContactMessageEmail(String toEmail, String subject, String emailBody);
 
 }

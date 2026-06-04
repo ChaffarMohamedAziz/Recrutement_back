@@ -21,6 +21,7 @@ C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recruteme
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\controller\CandidateInterviewController.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\controller\CandidateProfileController.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\controller\CompetenceController.java
+C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\controller\ContactController.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\controller\MessagingController.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\controller\NotificationController.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\controller\OfferController.java
@@ -66,6 +67,8 @@ C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recruteme
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\dto\CompetenceRequest.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\dto\CompetenceResponse.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\dto\ConfirmInterviewAbsenceRequest.java
+C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\dto\ContactMessageRequest.java
+C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\dto\ContactMessageResponse.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\dto\ConversationMessageRequest.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\dto\ConversationMessageResponse.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\dto\ConversationSummaryResponse.java
@@ -110,6 +113,7 @@ C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recruteme
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\entities\CandidateInvitation.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\entities\Candidature.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\entities\Competence.java
+C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\entities\ContactMessage.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\entities\ConversationMessage.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\entities\CV.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\entities\Entreprise.java
@@ -135,6 +139,7 @@ C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recruteme
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\repositories\CandidateRepository.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\repositories\CandidatureRepository.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\repositories\CompetenceRepository.java
+C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\repositories\ContactMessageRepository.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\repositories\ConversationMessageRepository.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\repositories\CVRepository.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\repositories\EntrepriseRepository.java
@@ -154,6 +159,7 @@ C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recruteme
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\service\CandidateProfileService.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\service\CloudinaryStorageService.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\service\CompetenceService.java
+C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\service\ContactMessageService.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\service\EmailService.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\service\GroqCvAutofillService.java
 C:\Users\chaff\OneDrive\Desktop\StagePfe\Recrutement\src\main\java\com\recrutement\recrutement\service\Impl\AuthServiceImpl.java

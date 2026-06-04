@@ -149,6 +149,16 @@ public class EmailServiceImpl implements EmailService {
         );
     }
 
+    @Override
+    public void sendContactMessageEmail(String toEmail, String subject, String emailBody) {
+        sendHtmlEmail(
+                toEmail,
+                hasText(subject) ? subject : "Nouveau message contact - SmartRecruit",
+                buildInterviewEmailTemplate("Message contact", emailBody),
+                "email de contact admin"
+        );
+    }
+
     private void sendHtmlEmail(String toEmail, String subject, String htmlBody, String emailLabel) {
         validateEmailRequest(toEmail, subject);
 

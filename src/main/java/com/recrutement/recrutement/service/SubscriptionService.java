@@ -134,7 +134,7 @@ public class SubscriptionService {
             throw new RuntimeException("Votre abonnement ne permet pas de publier d'offres actuellement.");
         }
         long currentOffers = offreRepository.findByRecruiter_IdOrderByDateDesc(recruiter.getId()).stream()
-                .filter(offre -> !"ARCHIVEE".equalsIgnoreCase(safe(offre.getStatut())))
+                .filter(offre -> "PUBLIEE".equalsIgnoreCase(safe(offre.getStatut())))
                 .count();
         if (currentOffers >= maxJobOffers) {
             throw new RuntimeException("Votre plan " + subscription.getPlanType().name() + " limite la publication a " + maxJobOffers + " offre(s).");
