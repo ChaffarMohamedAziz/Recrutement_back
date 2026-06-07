@@ -67,7 +67,6 @@ public class InterviewService {
     private final NotificationService notificationService;
     private final EmailService emailService;
     private final PythonGroqAgentService pythonGroqAgentService;
-    private final SubscriptionService subscriptionService;
     private final ObjectMapper objectMapper;
 
     public InterviewService(
@@ -79,7 +78,6 @@ public class InterviewService {
             NotificationService notificationService,
             EmailService emailService,
             PythonGroqAgentService pythonGroqAgentService,
-            SubscriptionService subscriptionService,
             ObjectMapper objectMapper
     ) {
         this.interviewRepository = interviewRepository;
@@ -90,14 +88,12 @@ public class InterviewService {
         this.notificationService = notificationService;
         this.emailService = emailService;
         this.pythonGroqAgentService = pythonGroqAgentService;
-        this.subscriptionService = subscriptionService;
         this.objectMapper = objectMapper;
     }
 
     @Transactional(readOnly = true)
     public InterviewPlannerDraftResponse getPlannerDraft(User currentUser, Long applicationId) {
         Recruiter recruiter = getCurrentRecruiter(currentUser);
-        subscriptionService.assertRecruiterCanUseAiFeatures(recruiter, "Smart Interview Planner");
         Candidature application = getRecruiterOwnedApplication(recruiter, applicationId);
         AiTest aiTest = aiTestRepository.findTopByApplication_IdOrderByCreatedAtDesc(applicationId).orElse(null);
 
@@ -116,7 +112,6 @@ public class InterviewService {
     @Transactional
     public InterviewResponse scheduleInterview(User currentUser, Long applicationId, ScheduleInterviewRequest request) {
         Recruiter recruiter = getCurrentRecruiter(currentUser);
-        subscriptionService.assertRecruiterCanUseAiFeatures(recruiter, "Smart Interview Planner");
         Candidature application = getRecruiterOwnedApplication(recruiter, applicationId);
         validateSchedulableApplication(application);
 
@@ -205,7 +200,6 @@ public class InterviewService {
     @Transactional
     public InterviewResponse rescheduleInterview(User currentUser, Long interviewId, RescheduleInterviewRequest request) {
         Recruiter recruiter = getCurrentRecruiter(currentUser);
-        subscriptionService.assertRecruiterCanUseAiFeatures(recruiter, "Smart Interview Planner");
         Interview interview = getRecruiterOwnedInterview(recruiter, interviewId);
         Candidature application = interview.getCandidature();
         if (application == null) {

@@ -63,7 +63,6 @@ public class OfferService {
     private final CandidateInvitationRepository candidateInvitationRepository;
     private final MatchingService matchingService;
     private final CompetenceService competenceService;
-    private final SubscriptionService subscriptionService;
     private final NotificationService notificationService;
     private final EmailService emailService;
     private final ObjectMapper objectMapper;
@@ -82,7 +81,6 @@ public class OfferService {
             CandidateInvitationRepository candidateInvitationRepository,
             MatchingService matchingService,
             CompetenceService competenceService,
-            SubscriptionService subscriptionService,
             NotificationService notificationService,
             EmailService emailService,
             ObjectMapper objectMapper
@@ -100,7 +98,6 @@ public class OfferService {
         this.candidateInvitationRepository = candidateInvitationRepository;
         this.matchingService = matchingService;
         this.competenceService = competenceService;
-        this.subscriptionService = subscriptionService;
         this.notificationService = notificationService;
         this.emailService = emailService;
         this.objectMapper = objectMapper;
@@ -547,7 +544,6 @@ public class OfferService {
     }
 
     private void assertOfferCanBePublished(User currentUser, Offre offre) {
-        subscriptionService.assertRecruiterCanPublishOffer(getCurrentRecruiter(currentUser), true);
         if (!hasValidatedAiTestForOffer(offre == null ? null : offre.getId())) {
             throw new RuntimeException("Test IA requis avant publication. Vous devez préparer et valider le Test IA avant de publier cette offre.");
         }

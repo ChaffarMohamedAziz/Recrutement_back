@@ -13,8 +13,6 @@ public interface AuthService {
 
     LoginResponse login(LoginRequest request);
 
-    SocialAuthResponse socialAuth(SocialAuthRequest request);
-
     String activateAccount(String token);
 
     RegisterResponse approveRecruiter(Long recruiterId);

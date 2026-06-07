@@ -96,7 +96,6 @@ public class AiTestService {
     private final NotificationService notificationService;
     private final EmailService emailService;
     private final PythonGroqAgentService pythonGroqAgentService;
-    private final SubscriptionService subscriptionService;
     private final ObjectMapper objectMapper;
 
     public AiTestService(
@@ -111,7 +110,6 @@ public class AiTestService {
             NotificationService notificationService,
             EmailService emailService,
             PythonGroqAgentService pythonGroqAgentService,
-            SubscriptionService subscriptionService,
             ObjectMapper objectMapper
     ) {
         this.aiTestRepository = aiTestRepository;
@@ -125,14 +123,12 @@ public class AiTestService {
         this.notificationService = notificationService;
         this.emailService = emailService;
         this.pythonGroqAgentService = pythonGroqAgentService;
-        this.subscriptionService = subscriptionService;
         this.objectMapper = objectMapper;
     }
 
     @Transactional
     public AiTestResponse configureOfferAiTest(User currentUser, Long offerId, CreateAiTestRequest request) {
         Recruiter recruiter = getCurrentRecruiter(currentUser);
-        subscriptionService.assertRecruiterCanUseAiFeatures(recruiter, "le Test IA de preselction");
         Offre offer = resolveRecruiterOffer(recruiter, offerId);
 
         AiTest aiTest = aiTestRepository.findTopByJobOffer_IdAndApplicationIsNullOrderByCreatedAtDesc(offerId)
@@ -155,7 +151,6 @@ public class AiTestService {
     @Transactional
     public AiTestResponse generateOfferAiTest(User currentUser, Long offerId, CreateAiTestRequest request) {
         Recruiter recruiter = getCurrentRecruiter(currentUser);
-        subscriptionService.assertRecruiterCanUseAiFeatures(recruiter, "la generation de Test IA");
         Offre offer = resolveRecruiterOffer(recruiter, offerId);
         AiTest aiTest = aiTestRepository.findTopByJobOffer_IdAndApplicationIsNullOrderByCreatedAtDesc(offerId)
                 .orElseGet(() -> AiTest.builder()
@@ -196,7 +191,6 @@ public class AiTestService {
     @Transactional
     public AiTestResponse updateRecruiterAiTest(User currentUser, Long testId, CreateAiTestRequest request) {
         Recruiter recruiter = getCurrentRecruiter(currentUser);
-        subscriptionService.assertRecruiterCanUseAiFeatures(recruiter, "la configuration du Test IA");
         AiTest aiTest = aiTestRepository.findByIdAndJobOffer_Recruiter_Id(testId, recruiter.getId())
                 .orElseThrow(() -> new RuntimeException("Test IA introuvable."));
         applyOfferTestConfiguration(aiTest, aiTest.getJobOffer(), recruiter, request, false);
@@ -211,7 +205,6 @@ public class AiTestService {
     @Transactional
     public AiTestResponse updateRecruiterAiQuestion(User currentUser, Long questionId, AiTestQuestionUpdateRequest request) {
         Recruiter recruiter = getCurrentRecruiter(currentUser);
-        subscriptionService.assertRecruiterCanUseAiFeatures(recruiter, "la modification des questions IA");
         AiQuestion question = aiQuestionRepository.findById(questionId)
                 .orElseThrow(() -> new RuntimeException("Question introuvable."));
         AiTest aiTest = question.getAiTest();
@@ -239,7 +232,6 @@ public class AiTestService {
     @Transactional
     public AiTestResponse regenerateRecruiterAiQuestion(User currentUser, Long questionId) {
         Recruiter recruiter = getCurrentRecruiter(currentUser);
-        subscriptionService.assertRecruiterCanUseAiFeatures(recruiter, "la regeneration des questions IA");
         AiQuestion question = aiQuestionRepository.findById(questionId)
                 .orElseThrow(() -> new RuntimeException("Question introuvable."));
         AiTest aiTest = question.getAiTest();
@@ -266,7 +258,6 @@ public class AiTestService {
     @Transactional
     public MessageResponse deleteRecruiterAiQuestion(User currentUser, Long questionId) {
         Recruiter recruiter = getCurrentRecruiter(currentUser);
-        subscriptionService.assertRecruiterCanUseAiFeatures(recruiter, "la suppression des questions IA");
         AiQuestion question = aiQuestionRepository.findById(questionId)
                 .orElseThrow(() -> new RuntimeException("Question introuvable."));
         AiTest aiTest = question.getAiTest();
@@ -284,7 +275,6 @@ public class AiTestService {
     @Transactional
     public AiTestResponse validateRecruiterAiTest(User currentUser, Long testId) {
         Recruiter recruiter = getCurrentRecruiter(currentUser);
-        subscriptionService.assertRecruiterCanUseAiFeatures(recruiter, "la validation du Test IA");
         AiTest aiTest = aiTestRepository.findByIdAndJobOffer_Recruiter_Id(testId, recruiter.getId())
                 .orElseThrow(() -> new RuntimeException("Test IA introuvable."));
         List<AiQuestion> questions = aiQuestionRepository.findByAiTest_IdOrderByOrderIndexAscIdAsc(aiTest.getId());
@@ -450,11 +440,10 @@ public class AiTestService {
             Long applicationId,
             Double requestedThreshold,
             Integer requestedDurationMinutes
-    ) {
-        Recruiter recruiter = getCurrentRecruiter(currentUser);
-        subscriptionService.assertRecruiterCanUseAiFeatures(recruiter, "l'envoi de Test IA");
-        Candidature application = candidatureRepository.findByIdAndOffre_Recruiter_Id(applicationId, recruiter.getId())
-                .orElseThrow(() -> new RuntimeException("Candidature introuvable."));
+) {
+    Recruiter recruiter = getCurrentRecruiter(currentUser);
+    Candidature application = candidatureRepository.findByIdAndOffre_Recruiter_Id(applicationId, recruiter.getId())
+            .orElseThrow(() -> new RuntimeException("Candidature introuvable."));
 
         Candidate candidate = application.getCandidate();
         Offre offer = application.getOffre();

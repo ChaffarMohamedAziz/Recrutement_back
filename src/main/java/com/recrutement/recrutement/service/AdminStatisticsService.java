@@ -17,7 +17,6 @@ import com.recrutement.recrutement.entities.AiTestResult;
 import com.recrutement.recrutement.entities.Candidature;
 import com.recrutement.recrutement.entities.Competence;
 import com.recrutement.recrutement.entities.Offre;
-import com.recrutement.recrutement.entities.Subscription;
 import com.recrutement.recrutement.entities.User;
 import com.recrutement.recrutement.repositories.AiTestRepository;
 import com.recrutement.recrutement.repositories.AiTestResultRepository;
@@ -25,7 +24,6 @@ import com.recrutement.recrutement.repositories.CandidatureRepository;
 import com.recrutement.recrutement.repositories.CompetenceRepository;
 import com.recrutement.recrutement.repositories.InterviewRepository;
 import com.recrutement.recrutement.repositories.OffreRepository;
-import com.recrutement.recrutement.repositories.SubscriptionRepository;
 import com.recrutement.recrutement.repositories.UserRepository;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -63,7 +61,6 @@ public class AdminStatisticsService {
     private final InterviewRepository interviewRepository;
     private final AiTestRepository aiTestRepository;
     private final AiTestResultRepository aiTestResultRepository;
-    private final SubscriptionRepository subscriptionRepository;
     private final CompetenceRepository competenceRepository;
     private final ObjectMapper objectMapper;
     private final MatchingService matchingService;
@@ -79,7 +76,6 @@ public class AdminStatisticsService {
             InterviewRepository interviewRepository,
             AiTestRepository aiTestRepository,
             AiTestResultRepository aiTestResultRepository,
-            SubscriptionRepository subscriptionRepository,
             CompetenceRepository competenceRepository,
             ObjectMapper objectMapper,
             MatchingService matchingService,
@@ -94,7 +90,6 @@ public class AdminStatisticsService {
         this.interviewRepository = interviewRepository;
         this.aiTestRepository = aiTestRepository;
         this.aiTestResultRepository = aiTestResultRepository;
-        this.subscriptionRepository = subscriptionRepository;
         this.competenceRepository = competenceRepository;
         this.objectMapper = objectMapper;
         this.matchingService = matchingService;
@@ -312,16 +307,6 @@ public class AdminStatisticsService {
 
     public List<AdminActivityResponse> getRecentActivity() {
         List<ActivitySeed> seeds = new ArrayList<>();
-
-        subscriptionRepository.findAllByOrderByUpdatedAtDesc().stream()
-                .filter(Objects::nonNull)
-                .limit(4)
-                .forEach(subscription -> seeds.add(new ActivitySeed(
-                        instantOf(subscription.getUpdatedAt() != null ? subscription.getUpdatedAt() : subscription.getCreatedAt()),
-                        "abonnement",
-                        "Abonnement " + safe(subscription.getPlanType() == null ? "" : subscription.getPlanType().name()),
-                        "Mise à jour pour " + safe(subscription.getRecruiter() == null ? "" : subscription.getRecruiter().getNom())
-                )));
 
         offreRepository.findAll().stream()
                 .filter(Objects::nonNull)
@@ -709,7 +694,6 @@ public class AdminStatisticsService {
 
     private String toneForActivity(String type) {
         return switch (safe(type)) {
-            case "abonnement" -> "warning";
             case "ai-test" -> "primary";
             case "offre" -> "success";
             default -> "neutral";
